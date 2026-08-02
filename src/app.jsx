@@ -706,11 +706,16 @@ export default function PaigeHQ() {
 function isOwnerSite() {
   try {
     const host = window.location.hostname.toLowerCase();
+    const label = host.split(".")[0];            /* "psh" in psh.vercel.app */
     const qs = new URLSearchParams(window.location.search);
+
     if (qs.get("hq") === "1") { try { localStorage.setItem("hq-side", "owner"); } catch {} return true; }
     if (qs.get("hq") === "0") { try { localStorage.removeItem("hq-side"); } catch {} return false; }
-    if (/^(hq|admin)\./.test(host)) return true;
-    if (/(owner|paige-hq)/.test(host)) return true;
+
+    if (/^(hq|admin)\./.test(host)) return true;                 /* hq.herdomain.com   */
+    if (label === "psh" || label === "paige-hq") return true;     /* psh.vercel.app     */
+    if (/(^|-)(owner|admin|hq)(-|$)/.test(label)) return true;    /* paige-owner.vercel.app */
+
     try { if (localStorage.getItem("hq-side") === "owner") return true; } catch {}
     return false;
   } catch {
