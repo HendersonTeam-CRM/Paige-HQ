@@ -433,6 +433,7 @@ export default function PaigeHQ() {
   const [calView, setCalView] = useState("month");
   const [vaultView, setVaultView] = useState("expenses");
   const [hasSession, setHasSession] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
   const [syncTick, setSyncTick] = useState(0);
   const [mode, setMode] = useState(() => (isOwnerSite() ? "paige" : "client"));
   useEffect(() => { try { window.scrollTo({ top: 0 }); } catch {} }, [tab, brandKey, mode]);
@@ -553,8 +554,8 @@ export default function PaigeHQ() {
   };
   const hasSamples = clients.some((c) => c.sample) || index.some((r) => r.sample) || estate.some((p) => p.sample);
 
-  if (mode === "paige" && !hasSession && !loading)
-    return <OwnerSignIn onDone={() => setHasSession(true)} onExit={() => { setMode("client"); setBrandKey("hub"); setTab("home"); }} />;
+  if (mode === "paige" && !unlocked)
+    return <OwnerGate onUnlock={() => { setUnlocked(true); setHasSession(true); }} onExit={() => { setUnlocked(false); setMode("client"); setBrandKey("hub"); setTab("home"); }} />;
 
   if (loading)
     return (
@@ -681,9 +682,9 @@ export default function PaigeHQ() {
               <span style={{ fontSize: 10.5, letterSpacing: 0.8, textTransform: "uppercase", fontWeight: 700 }}>{label}</span>
             </button>
           ))}
-          <button onClick={async () => { await auth.signOut(); setHasSession(false); setMode("client"); setBrandKey("hub"); setTab("home"); }}
+          <button onClick={() => setUnlocked(false)}
             style={{ flex: 1, padding: "16px 0 15px", background: "none", border: "none", color: B.c.faint }}>
-            <span className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 1, textTransform: "uppercase", fontWeight: 700 }}>Sign<br />out</span>
+            <span className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 1, textTransform: "uppercase", fontWeight: 700 }}>Lock</span>
           </button>
         </div>
       </nav>
@@ -724,44 +725,158 @@ function isOwnerSite() {
 }
 
 /* ================= OWNER SIGN-IN (hq. subdomain only) ================= */
-function OwnerSignIn({ onDone, onExit }) {
+function OwnerGate({ onUnlock, onExit }) {
   const hub = BRANDS.hub;
+  const PIN_KEY = "hq-pin";
+  const readPin = () => { try { return localStorage.getItem(PIN_KEY) || ""; } catch { return ""; } };
+
+  /* stage: "checking" | "account" (first time on this device) | "create" | "locked" */
+  const [stage, setStage] = useState("checking");
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const go = async () => {
+  const [digits, setDigits] = useState("");
+  const [confirming, setConfirming] = useState("");
+  const [shake, setShake] = useState(false);
+
+  useEffect(() => {
+    auth.currentSession().then((s) => {
+      if (!s) setStage("account");
+      else setStage(readPin() ? "locked" : "create");
+    });
+  }, []);
+
+  const signIn = async () => {
     if (!email || !pw) return;
     setBusy(true); setErr("");
-    try { await auth.signIn(email.trim(), pw); onDone(); }
-    catch (e) { setErr(e.message || "That didn't work — check the email and password."); setPw(""); }
+    try { await auth.signIn(email.trim(), pw); setStage("create"); setPw(""); }
+    catch (e2) { setErr(e2.message || "That didn't work — check the email and password."); setPw(""); }
     finally { setBusy(false); }
   };
-  return (
+
+  const wrong = () => { setShake(true); setTimeout(() => setShake(false), 420); setDigits(""); };
+
+  const press = (n) => {
+    if (digits.length >= 4) return;
+    const next = digits + n;
+    setDigits(next);
+    if (next.length < 4) return;
+
+    setTimeout(() => {
+      if (stage === "locked") {
+        if (next === readPin()) onUnlock();
+        else { setErr("Wrong code"); wrong(); }
+        return;
+      }
+      /* creating a new code */
+      if (!confirming) { setConfirming(next); setDigits(""); setErr(""); return; }
+      if (next === confirming) {
+        try { localStorage.setItem(PIN_KEY, next); } catch {}
+        onUnlock();
+      } else {
+        setErr("Codes didn't match — start again");
+        setConfirming(""); wrong();
+      }
+    }, 130);
+  };
+
+  const wrap = (kids) => (
     <div className="hq" style={{ minHeight: "100vh", background: hub.c.bg, display: "grid", placeItems: "center", padding: 20 }}>
       <style>{GLOBAL_CSS}</style>
-      <div className="hq-fade" style={{ width: "100%", maxWidth: 360, textAlign: "center" }}>
-        <div style={{ fontFamily: hub.display, fontSize: 27, fontWeight: 600, letterSpacing: 3, color: hub.c.ink }}>PAIGE HQ</div>
-        <hr className="lux-rule" style={{ width: 110, margin: "10px auto 22px" }} />
+      <style>{`@keyframes hqShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}`}</style>
+      <div className="hq-fade" style={{ width: "100%", maxWidth: 320, textAlign: "center" }}>
+        <div style={{ fontFamily: hub.display, fontSize: 26, fontWeight: 600, letterSpacing: 3, color: hub.c.ink }}>PAIGE HQ</div>
+        <hr className="lux-rule" style={{ width: 100, margin: "10px auto 24px" }} />
+        {kids}
+      </div>
+    </div>
+  );
+
+  if (stage === "checking") return wrap(<div className="hq-mono" style={{ fontSize: 9, letterSpacing: 3, color: hub.c.faint }}>ONE MOMENT…</div>);
+
+  /* first time on this device */
+  if (stage === "account")
+    return wrap(
+      <>
+        <p style={{ fontSize: 13, fontWeight: 300, color: hub.c.faint, lineHeight: 1.7, margin: "0 0 16px" }}>
+          Sign in once to set this device up. After that it's just your 4-digit code.
+        </p>
         <input type="email" inputMode="email" autoComplete="username" placeholder="email" value={email} autoFocus
-          onChange={(e) => { setEmail(e.target.value); setErr(""); }} onKeyDown={(e) => e.key === "Enter" && go()}
+          onChange={(ev) => { setEmail(ev.target.value); setErr(""); }} onKeyDown={(ev) => ev.key === "Enter" && signIn()}
           style={{ width: "100%", padding: "13px 14px", fontSize: 15, border: `1.5px solid ${hub.c.line}`, borderRadius: 8, marginBottom: 8, boxSizing: "border-box" }} />
         <input type="password" autoComplete="current-password" placeholder="password" value={pw}
-          onChange={(e) => { setPw(e.target.value); setErr(""); }} onKeyDown={(e) => e.key === "Enter" && go()}
+          onChange={(ev) => { setPw(ev.target.value); setErr(""); }} onKeyDown={(ev) => ev.key === "Enter" && signIn()}
           style={{ width: "100%", padding: "13px 14px", fontSize: 15, border: `1.5px solid ${err ? "#B3452F" : hub.c.line}`, borderRadius: 8, marginBottom: 10, boxSizing: "border-box" }} />
         {err && <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 1.5, color: "#B3452F", marginBottom: 10, lineHeight: 1.7 }}>{err.toUpperCase()}</div>}
-        <button onClick={go} disabled={busy || !email || !pw}
+        <button onClick={signIn} disabled={busy || !email || !pw}
           style={{ width: "100%", padding: 14, borderRadius: 8, border: "none", cursor: "pointer",
             background: (email && pw && !busy) ? `linear-gradient(160deg, ${hub.c.deep} 20%, ${hub.c.deep2} 100%)` : "#CBC2B4",
             color: hub.c.gold, fontFamily: hub.display, fontSize: 15, fontWeight: 600, letterSpacing: 2 }}>
-          {busy ? "SIGNING IN…" : "SIGN IN"}
+          {busy ? "SIGNING IN…" : "SET UP THIS DEVICE"}
         </button>
         <button onClick={onExit} className="hq-mono"
           style={{ width: "100%", marginTop: 14, border: "none", background: "none", color: hub.c.faint, fontSize: 8.5, letterSpacing: 2, cursor: "pointer" }}>
           ‹ GO TO THE CLIENT SITE
         </button>
+      </>
+    );
+
+  /* the keypad — creating or entering */
+  const label = stage === "create"
+    ? (confirming ? "CONFIRM YOUR CODE" : "CHOOSE A 4-DIGIT CODE")
+    : "ENTER YOUR CODE";
+
+  return wrap(
+    <>
+      <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 3, color: hub.c.faint, marginBottom: 16 }}>{label}</div>
+
+      <div style={{ display: "flex", justifyContent: "center", gap: 14, marginBottom: 8, animation: shake ? "hqShake .42s" : "none" }}>
+        {[0, 1, 2, 3].map((i) => (
+          <span key={i} style={{
+            width: 13, height: 13, borderRadius: "50%",
+            background: i < digits.length ? hub.c.accent : "transparent",
+            border: `1.5px solid ${i < digits.length ? hub.c.accent : hub.c.line}`,
+            transition: "background .15s",
+          }} />
+        ))}
       </div>
-    </div>
+      <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.5, color: err ? "#B3452F" : "transparent", height: 14, marginBottom: 14 }}>
+        {(err || "·").toUpperCase()}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, justifyItems: "center" }}>
+        {["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"].map((k, i) =>
+          k === "" ? <span key={i} /> : (
+            <button key={i} className="hq-press"
+              onClick={() => (k === "⌫" ? setDigits(digits.slice(0, -1)) : press(k))}
+              style={{
+                width: 68, height: 68, borderRadius: "50%", cursor: "pointer",
+                border: `1px solid ${hub.c.line}`, background: k === "⌫" ? "transparent" : "#FFFFFF",
+                fontFamily: k === "⌫" ? "inherit" : hub.display, fontSize: k === "⌫" ? 17 : 25,
+                fontWeight: 500, color: hub.c.ink, boxShadow: k === "⌫" ? "none" : "0 1px 4px rgba(20,15,10,.06)",
+              }}>
+              {k}
+            </button>
+          )
+        )}
+      </div>
+
+      <button
+        onClick={async () => {
+          try { localStorage.removeItem(PIN_KEY); } catch {}
+          await auth.signOut();
+          setStage("account"); setDigits(""); setConfirming(""); setErr("");
+        }}
+        className="hq-mono"
+        style={{ width: "100%", marginTop: 22, border: "none", background: "none", color: hub.c.faint, fontSize: 8, letterSpacing: 2, cursor: "pointer" }}>
+        FORGOT CODE — SIGN IN AGAIN
+      </button>
+      <button onClick={onExit} className="hq-mono"
+        style={{ width: "100%", marginTop: 10, border: "none", background: "none", color: hub.c.faint, fontSize: 8, letterSpacing: 2, cursor: "pointer" }}>
+        ‹ GO TO THE CLIENT SITE
+      </button>
+    </>
   );
 }
 
