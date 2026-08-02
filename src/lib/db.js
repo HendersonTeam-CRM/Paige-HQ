@@ -12,12 +12,17 @@ export const supabase = createClient(url, key, {
 });
 
 /* ------------------------------------------------------------------
-   Which table a saved name belongs in.
-   PUBLIC  = clients can read it (prices, hours, notices, pageants)
-   PRIVATE = Paige only (everything else)
+   Where each saved name lives.
+
+   PUBLIC   → clients can read it: prices, hours, notices, pageants,
+              the gallery index and its photos.
+   REVIEWS  → its own table, so a client with no account can leave one.
+   PRIVATE  → Paige only: clients, calendar, income, mileage, to-dos,
+              settings, receipts.
 ------------------------------------------------------------------- */
-const PUBLIC_KEYS = new Set(["biz-settings", "alerts", "pageants"]);
-const isImage = (k) => k.startsWith("receipt-img:");
+const PUBLIC_KEYS = new Set(["biz-settings", "alerts", "pageants", "gallery"]);
+const isGalleryImg = (k) => k.startsWith("gallery-img:");
+const isReceiptImg = (k) => k.startsWith("receipt-img:");
 
 let signedIn = false;
 supabase.auth.getSession().then(({ data }) => { signedIn = !!data.session; });
@@ -45,29 +50,41 @@ export const auth = {
 /* ---------------------------- READ -------------------------------- */
 export async function loadJSON(k) {
   try {
-    if (isImage(k)) {
+    if (isReceiptImg(k)) {
       const id = k.slice("receipt-img:".length);
       const { data } = await supabase.from("receipt_images").select("data").eq("id", id).maybeSingle();
       return data ? data.data : null;
+    }
+
+    if (isGalleryImg(k) || PUBLIC_KEYS.has(k)) {
+      const { data } = await supabase.from("public_data").select("value").eq("key", k).maybeSingle();
+      return data ? data.value : null;
+    }
+
+    if (k === "reviews") {
+      const { data } = await supabase.from("reviews").select("*").order("created_at", { ascending: false });
+      return (data || []).map((r) => ({
+        id: r.id,
+        brand: r.brand,
+        name: r.name,
+        rating: r.rating,
+        text: r.text,
+        approved: r.approved,
+        date: (r.created_at || "").slice(0, 10),
+      }));
     }
 
     if (k === "leads") {
       if (!signedIn) return [];
       const { data } = await supabase.from("leads").select("*").order("created_at", { ascending: false });
       return (data || []).map((r) => ({
-        id: r.id,
-        name: r.name,
-        address: r.address,
-        contact: r.contact,
-        timeframe: r.timeframe,
-        note: r.note,
-        date: (r.created_at || "").slice(0, 10),
+        id: r.id, name: r.name, address: r.address, contact: r.contact,
+        timeframe: r.timeframe, note: r.note, date: (r.created_at || "").slice(0, 10),
       }));
     }
 
-    const table = PUBLIC_KEYS.has(k) ? "public_data" : "private_data";
-    if (table === "private_data" && !signedIn) return null;
-    const { data } = await supabase.from(table).select("value").eq("key", k).maybeSingle();
+    if (!signedIn) return null;                       /* everything else is hers */
+    const { data } = await supabase.from("private_data").select("value").eq("key", k).maybeSingle();
     return data ? data.value : null;
   } catch (e) {
     console.error("load failed:", k, e);
@@ -78,39 +95,66 @@ export async function loadJSON(k) {
 /* ---------------------------- WRITE ------------------------------- */
 export async function saveJSON(k, v) {
   try {
-    if (isImage(k)) {
+    if (isReceiptImg(k)) {
       const id = k.slice("receipt-img:".length);
       const { error } = await supabase.from("receipt_images").upsert({ id, data: v });
       if (error) throw error;
       return true;
     }
 
-    if (k === "leads") {
+    if (isGalleryImg(k) || PUBLIC_KEYS.has(k)) {
+      const { error } = await supabase.from("public_data").upsert({ key: k, value: v });
+      if (error) throw error;
+      return true;
+    }
+
+    if (k === "reviews") {
       const list = Array.isArray(v) ? v : [];
       if (!signedIn) {
-        // A client just submitted a valuation request: insert only the new one.
-        const fresh = list[0];
+        /* A client just left a review — insert it, unapproved. */
+        const fresh = list.find((r) => r.approved === false && String(r.id).startsWith("rv"));
         if (!fresh) return true;
-        const { error } = await supabase.from("leads").insert({
-          name: fresh.name || "",
-          address: fresh.address || "",
-          contact: fresh.contact || "",
-          timeframe: fresh.timeframe || "",
-          note: fresh.note || "",
+        const { error } = await supabase.from("reviews").insert({
+          brand: fresh.brand, name: fresh.name, rating: fresh.rating, text: fresh.text, approved: false,
         });
         if (error) throw error;
         return true;
       }
-      // Paige saving the list means she removed one or more.
-      const keep = new Set(list.map((l) => l.id));
+      /* Paige publishing, hiding or deleting. */
+      const { data: existing } = await supabase.from("reviews").select("id");
+      const keep = new Set(list.map((r) => String(r.id)));
+      const gone = (existing || []).map((r) => r.id).filter((id) => !keep.has(String(id)));
+      if (gone.length) await supabase.from("reviews").delete().in("id", gone);
+      for (const r of list) {
+        if (String(r.id).startsWith("rv")) {
+          await supabase.from("reviews").insert({ brand: r.brand, name: r.name, rating: r.rating, text: r.text, approved: r.approved !== false });
+        } else {
+          await supabase.from("reviews").update({ approved: r.approved !== false, text: r.text, rating: r.rating }).eq("id", r.id);
+        }
+      }
+      return true;
+    }
+
+    if (k === "leads") {
+      const list = Array.isArray(v) ? v : [];
+      if (!signedIn) {
+        const fresh = list[0];
+        if (!fresh) return true;
+        const { error } = await supabase.from("leads").insert({
+          name: fresh.name || "", address: fresh.address || "", contact: fresh.contact || "",
+          timeframe: fresh.timeframe || "", note: fresh.note || "",
+        });
+        if (error) throw error;
+        return true;
+      }
       const { data: existing } = await supabase.from("leads").select("id");
+      const keep = new Set(list.map((l) => l.id));
       const gone = (existing || []).map((r) => r.id).filter((id) => !keep.has(id));
       if (gone.length) await supabase.from("leads").delete().in("id", gone);
       return true;
     }
 
-    const table = PUBLIC_KEYS.has(k) ? "public_data" : "private_data";
-    const { error } = await supabase.from(table).upsert({ key: k, value: v });
+    const { error } = await supabase.from("private_data").upsert({ key: k, value: v });
     if (error) throw error;
     return true;
   } catch (e) {
@@ -122,13 +166,15 @@ export async function saveJSON(k, v) {
 /* --------------------------- DELETE ------------------------------- */
 export async function removeKey(k) {
   try {
-    if (isImage(k)) {
-      const id = k.slice("receipt-img:".length);
-      await supabase.from("receipt_images").delete().eq("id", id);
+    if (isReceiptImg(k)) {
+      await supabase.from("receipt_images").delete().eq("id", k.slice("receipt-img:".length));
       return true;
     }
-    const table = PUBLIC_KEYS.has(k) ? "public_data" : "private_data";
-    await supabase.from(table).delete().eq("key", k);
+    if (isGalleryImg(k) || PUBLIC_KEYS.has(k)) {
+      await supabase.from("public_data").delete().eq("key", k);
+      return true;
+    }
+    await supabase.from("private_data").delete().eq("key", k);
     return true;
   } catch (e) {
     console.error("delete failed:", k, e);
@@ -136,21 +182,31 @@ export async function removeKey(k) {
   }
 }
 
+
+/* ------------------- CLIENT PORTAL LOOKUP -------------------
+   Hands a phone number to the client_lookup function in Supabase,
+   which returns only that one client and their own appointments.  */
+export async function findClientByPhone(phone) {
+  try {
+    const { data, error } = await supabase.rpc("client_lookup", { p_phone: phone });
+    if (error) throw error;
+    return data || null;
+  } catch (e) {
+    console.error("client lookup failed:", e);
+    return null;
+  }
+}
+
 /* ------------------- LIVE UPDATES ACROSS DEVICES ------------------ */
 export function onRemoteChange(cb) {
   let timer = null;
-  const bump = () => {
-    clearTimeout(timer);
-    timer = setTimeout(cb, 400); // small delay so a burst of saves counts once
-  };
+  const bump = () => { clearTimeout(timer); timer = setTimeout(cb, 400); };
   const channel = supabase
     .channel("paige-hq-sync")
     .on("postgres_changes", { event: "*", schema: "public", table: "public_data" }, bump)
     .on("postgres_changes", { event: "*", schema: "public", table: "private_data" }, bump)
+    .on("postgres_changes", { event: "*", schema: "public", table: "reviews" }, bump)
     .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, bump)
     .subscribe();
-  return () => {
-    clearTimeout(timer);
-    supabase.removeChannel(channel);
-  };
+  return () => { clearTimeout(timer); supabase.removeChannel(channel); };
 }
