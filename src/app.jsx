@@ -120,11 +120,6 @@ const CARE_GUIDE = {
   },
 };
 
-/* While testing, both portals are reachable from the bar at the top of the screen.
-   On launch day set this to false — then the web address alone decides which side
-   loads (hq.<domain> → Paige, everything else → clients) and the bar disappears. */
-const PREVIEW_MODE = false;
-
 /* The public site clients visit. Paige can change this in Settings
    if the address ever moves to a real domain. */
 const CLIENT_SITE_DEFAULT = "https://paigehenderson.vercel.app";
@@ -274,6 +269,22 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1.5px
 
 /* ================= STORAGE / IMAGE / AI ================= */
 /* data lives in Supabase — see src/lib/db.js */
+
+/* a headshot, cropped square and kept small enough to travel in a request */
+const compressAvatar = (file) => new Promise((resolve, reject) => {
+  const img = new Image(); const url = URL.createObjectURL(file);
+  img.onload = () => {
+    const side = Math.min(img.width, img.height);
+    const sx = (img.width - side) / 2, sy = (img.height - side) / 2;
+    const c = document.createElement("canvas");
+    c.width = 260; c.height = 260;
+    c.getContext("2d").drawImage(img, sx, sy, side, side, 0, 0, 260, 260);
+    URL.revokeObjectURL(url);
+    resolve(c.toDataURL("image/jpeg", 0.6).split(",")[1]);
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read image")); };
+  img.src = url;
+});
 
 const compressImage = (file) => new Promise((resolve, reject) => {
   const img = new Image(); const url = URL.createObjectURL(file);
@@ -610,25 +621,6 @@ export default function PaigeHQ() {
         <ClientPortal client={portalClient} events={events} saveEvents={saveEvents} pageants={pageants} onExit={() => setPortalId(null)} />
       )}
 
-      {PREVIEW_MODE && (
-        <div style={{ display: "flex", background: "#22201D", position: "sticky", top: 0, zIndex: 60 }}>
-          {[["client", "◆ CLIENT VIEW"], ["paige", "❋ PAIGE'S PORTAL"]].map(([m, lab]) => {
-            const on = mode === m;
-            return (
-              <button key={m} className="hq-mono"
-                onClick={() => { if (m === "paige") { setMode("paige"); setTab("today"); } else { setMode("client"); setBrandKey("hub"); setTab("home"); } }}
-                style={{ flex: 1, padding: "9px 0 8px", border: "none", cursor: "pointer",
-                  borderBottom: on ? "2px solid #C9A227" : "2px solid transparent",
-                  background: on ? "#2E2B27" : "transparent", color: on ? "#E8DCC0" : "#8A8378",
-                  fontSize: 8, letterSpacing: 2, fontWeight: 600 }}>
-                {lab}
-              </button>
-            );
-          })}
-          <span className="hq-mono" style={{ padding: "10px 10px 0", color: "#5E594F", fontSize: 6.5, letterSpacing: 1.5 }}>PREVIEW</span>
-        </div>
-      )}
-
       <div className="hq-body">
       {mode === "client" ? (
         /* Client top bar — minimal: home + where you are */
@@ -694,6 +686,7 @@ export default function PaigeHQ() {
                   shade: d.shade || "", undertone: d.undertone || "", skinNotes: d.skinNotes || "",
                   division: d.division || "", goals: d.goals || "",
                   referredBy: d.referralName || d.referral || "",
+                  photo: d.photo || "",
                   bigDate: "", bigLabel: "",
                   history: [],
                 }, ...clients]);
@@ -735,7 +728,7 @@ export default function PaigeHQ() {
               <span style={{ fontSize: 10.5, letterSpacing: 0.8, textTransform: "uppercase", fontWeight: 700 }}>{label}</span>
             </button>
           ))}
-          <button onClick={() => setUnlocked(false)}
+          <button onClick={() => { try { localStorage.removeItem("hq-unlocked-at"); } catch {} setUnlocked(false); }}
             style={{ flex: 1, padding: "16px 0 15px", background: "none", border: "none", color: B.c.faint }}>
             <span className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 1, textTransform: "uppercase", fontWeight: 700 }}>Lock</span>
           </button>
@@ -781,7 +774,16 @@ function isOwnerSite() {
 function OwnerGate({ onUnlock, onExit }) {
   const hub = BRANDS.hub;
   const PIN_KEY = "hq-pin";
+  const SEEN_KEY = "hq-unlocked-at";
+  const GRACE = 6 * 60 * 60 * 1000;                 /* six hours */
   const readPin = () => { try { return localStorage.getItem(PIN_KEY) || ""; } catch { return ""; } };
+  const stillOpen = () => {
+    try {
+      const t = Number(localStorage.getItem(SEEN_KEY) || 0);
+      return t > 0 && Date.now() - t < GRACE;
+    } catch { return false; }
+  };
+  const markOpen = () => { try { localStorage.setItem(SEEN_KEY, String(Date.now())); } catch {} };
 
   /* stage: "checking" | "account" (first time on this device) | "create" | "locked" */
   const [stage, setStage] = useState("checking");
@@ -795,8 +797,10 @@ function OwnerGate({ onUnlock, onExit }) {
 
   useEffect(() => {
     auth.currentSession().then((s) => {
-      if (!s) setStage("account");
-      else setStage(readPin() ? "locked" : "create");
+      if (!s) { setStage("account"); return; }
+      if (!readPin()) { setStage("create"); return; }
+      if (stillOpen()) { markOpen(); onUnlock(); return; }   /* back within six hours */
+      setStage("locked");
     });
   }, []);
 
@@ -818,7 +822,7 @@ function OwnerGate({ onUnlock, onExit }) {
 
     setTimeout(() => {
       if (stage === "locked") {
-        if (next === readPin()) onUnlock();
+        if (next === readPin()) { markOpen(); onUnlock(); }
         else { setErr("Wrong code"); wrong(); }
         return;
       }
@@ -826,6 +830,7 @@ function OwnerGate({ onUnlock, onExit }) {
       if (!confirming) { setConfirming(next); setDigits(""); setErr(""); return; }
       if (next === confirming) {
         try { localStorage.setItem(PIN_KEY, next); } catch {}
+        markOpen();
         onUnlock();
       } else {
         setErr("Codes didn't match — start again");
@@ -917,7 +922,7 @@ function OwnerGate({ onUnlock, onExit }) {
 
       <button
         onClick={async () => {
-          try { localStorage.removeItem(PIN_KEY); } catch {}
+          try { localStorage.removeItem(PIN_KEY); localStorage.removeItem(SEEN_KEY); } catch {}
           await auth.signOut();
           setStage("account"); setDigits(""); setConfirming(""); setErr("");
         }}
@@ -1142,7 +1147,7 @@ function IntakeForm({ B, onDone, onBack }) {
     name: "", phone: "", email: "", biz: "VG",
     undertone: "", shade: "", skinNotes: "",
     division: "", goals: "",
-    referral: "", referralName: "", about: "",
+    referral: "", referralName: "", about: "", photo: "",
   });
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -1210,6 +1215,30 @@ function IntakeForm({ B, onDone, onBack }) {
             </button>
           );
         })}
+      </div>
+
+      {/* headshot */}
+      <div style={{ display: "flex", gap: 13, alignItems: "center", marginBottom: 14 }}>
+        <label style={{ cursor: "pointer", flexShrink: 0 }}>
+          <div style={{ width: 76, height: 76, borderRadius: "50%", overflow: "hidden", display: "grid", placeItems: "center",
+            border: `1.5px ${f.photo ? "solid" : "dashed"} ${f.photo ? hub.c.accent : hub.c.line}`, background: f.photo ? "transparent" : hub.c.soft }}>
+            {f.photo
+              ? <img src={`data:image/jpeg;base64,${f.photo}`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : <span style={{ fontSize: 21, color: hub.c.faint }}>+</span>}
+          </div>
+          <input type="file" accept="image/*" style={{ display: "none" }}
+            onChange={async (e) => {
+              const file = e.target.files && e.target.files[0];
+              if (!file) return;
+              try { setF((prev) => ({ ...prev, photo: "" })); const b64 = await compressAvatar(file); setF((prev) => ({ ...prev, photo: b64 })); } catch {}
+            }} />
+        </label>
+        <div>
+          <div style={{ fontSize: 13.5, fontWeight: 400, color: hub.c.ink }}>{f.photo ? "Looking good" : "Add a photo"}</div>
+          <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.2, color: hub.c.faint, marginTop: 3, lineHeight: 1.7 }}>
+            OPTIONAL — HELPS PAIGE PUT<br />A FACE TO YOUR NAME
+          </div>
+        </div>
       </div>
 
       {field("name", isVG ? "Your name" : "Contestant's name")}
@@ -1776,7 +1805,7 @@ const QUOTES = [
   { q: "Optimism is the faith that leads to achievement.", by: "Helen Keller" },
   { q: "Success is liking yourself, liking what you do, and liking how you do it.", by: "Maya Angelou" },
 ];
-function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = [], clients = [], leads = [], requests = [], busyBlocks = [], onClearRequest, onSynced, onOpenCalendar, onOpenVault, onOpenClients }) {
+function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = [], clients = [], leads = [], requests = [], busyBlocks = [], onClearRequest, onAddClient, onSynced, onOpenCalendar, onOpenVault, onOpenClients }) {
   const { input, card, H } = useBrandBits(B);
   const [todoText, setTodoText] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -1813,6 +1842,7 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
   const fmtR = (d) => new Date(d + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
   const [copiedId, setCopiedId] = useState("");
   const [waitOpen, setWaitOpen] = useState(false);
+  const [lookAt, setLookAt] = useState(null);
   const waiting = requests.filter((r) => r.kind === "waitlist");
   const overdue = clients
     .map((c) => {
@@ -2069,12 +2099,17 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
             const ph = String(r.phone || "").replace(/\D/g, "").slice(-10);
             return (
               <div key={r.id} style={{ padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,.12)" }}>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                <button onClick={() => setLookAt({ r, d })}
+                  style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
+                  {d.photo
+                    ? <img src={`data:image/jpeg;base64,${d.photo}`} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                    : <span style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0, background: "rgba(255,255,255,.12)", color: B.c.gold, display: "grid", placeItems: "center", fontSize: 12 }}>{r.brand === "VG" ? "✦" : "♛"}</span>}
                   <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: B.c.gold, minWidth: 0 }}>
-                    {r.brand === "VG" ? "✦" : "♛"} {r.name} — new client
+                    {r.name} — new client
                   </span>
                   <span className="hq-mono" style={{ fontSize: 7.5, color: B.c.soft, opacity: 0.6, whiteSpace: "nowrap" }}>{String(r.date).slice(5).replace("-", ".")}</span>
-                </div>
+                  <span style={{ color: B.c.gold, fontSize: 13, opacity: 0.6 }}>›</span>
+                </button>
                 <div style={{ fontSize: 12, fontWeight: 300, color: B.c.soft, opacity: 0.85, marginTop: 3, lineHeight: 1.6 }}>
                   {[d.shade, d.division, d.goals, d.about, d.skinNotes].filter(Boolean).join(" · ")}
                   {d.referral ? ` · found you via ${d.referral}${d.referralName ? ` (${d.referralName})` : ""}` : ""}
@@ -2209,6 +2244,65 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
           ))}
         </div>
       )}
+
+      {/* a full look before she decides */}
+      {lookAt && (() => {
+        const { r, d } = lookAt;
+        const ph = String(r.phone || "").replace(/\D/g, "").slice(-10);
+        const rows = [
+          ["Phone", r.phone],
+          ["Email", d.email],
+          ["Coming for", r.brand === "VG" ? "Velvet Glow — a tan" : "Pageant Perfect — coaching"],
+          ["Usual shade", d.shade],
+          ["Skin notes", d.skinNotes],
+          ["Division", d.division],
+          ["Working on", d.goals],
+          ["Occasion / background", d.about],
+          ["Found you via", d.referralName ? `${d.referral} — ${d.referralName}` : d.referral],
+          ["Sent", r.date],
+        ].filter(([, v]) => v);
+        return (
+          <div onClick={() => setLookAt(null)}
+            style={{ position: "fixed", inset: 0, background: "rgba(20,17,14,.55)", zIndex: 90, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+            <div onClick={(e) => e.stopPropagation()} className="hq-fade"
+              style={{ background: B.c.bg, width: "100%", maxWidth: 560, maxHeight: "88vh", overflowY: "auto", borderRadius: "14px 14px 0 0", padding: 22, borderTop: `1px solid ${B.c.accent}` }}>
+              <div style={{ textAlign: "center", marginBottom: 16 }}>
+                {d.photo
+                  ? <img src={`data:image/jpeg;base64,${d.photo}`} alt="" style={{ width: 92, height: 92, borderRadius: "50%", objectFit: "cover", border: `2px solid ${B.c.accent}` }} />
+                  : <div style={{ width: 92, height: 92, borderRadius: "50%", margin: "0 auto", background: B.c.soft, color: B.c.accent, display: "grid", placeItems: "center", fontSize: 30 }}>{r.brand === "VG" ? "✦" : "♛"}</div>}
+                <div style={{ fontFamily: B.display, fontSize: 24, fontWeight: 600, color: B.c.ink, marginTop: 10 }}>{r.name}</div>
+                <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 2, color: B.c.faint, marginTop: 4 }}>WANTS TO BE A CLIENT</div>
+              </div>
+
+              {rows.map(([k, v]) => (
+                <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 14, padding: "9px 0", borderBottom: `1px solid ${B.c.line}` }}>
+                  <span className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.2, color: B.c.faint, whiteSpace: "nowrap", paddingTop: 3 }}>{k.toUpperCase()}</span>
+                  <span style={{ fontSize: 13.5, fontWeight: 300, textAlign: "right", color: B.c.ink }}>{v}</span>
+                </div>
+              ))}
+
+              <div style={{ display: "flex", gap: 9, marginTop: 18 }}>
+                <button onClick={async () => { await onAddClient(r, d); setLookAt(null); }} className="hq-mono hq-press"
+                  style={{ flex: 1.4, padding: "14px 0", borderRadius: 7, border: "none", cursor: "pointer",
+                    background: B.c.metal, color: B.c.deep, fontSize: 10, letterSpacing: 2, fontWeight: 700 }}>
+                  ADD AS CLIENT
+                </button>
+                {ph && (
+                  <a href={`sms:+1${ph}`} className="hq-mono hq-press"
+                    style={{ flex: 1, padding: "14px 0", borderRadius: 7, textAlign: "center", textDecoration: "none",
+                      border: `1px solid ${B.c.accent}`, color: B.c.accent, fontSize: 10, letterSpacing: 2, fontWeight: 700 }}>
+                    TEXT
+                  </a>
+                )}
+              </div>
+              <button onClick={() => setLookAt(null)} className="hq-mono"
+                style={{ width: "100%", marginTop: 12, border: "none", background: "none", color: B.c.faint, fontSize: 8.5, letterSpacing: 2, cursor: "pointer" }}>
+                CLOSE
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Monthly pulse */}
       {(pulseGlows > 0 || pulseLessons > 0) && (
@@ -2599,7 +2693,11 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
                     try {
                       const r = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "test" }) });
                       const j = await r.json();
-                      setPushMsg(j.ok ? `SENT TO ${j.sent} DEVICE${j.sent === 1 ? "" : "S"}` : String(j.error || "DIDN'T SEND").toUpperCase());
+                      setPushMsg(
+                        !j.ok ? String(j.error || "DIDN'T SEND").toUpperCase()
+                        : j.sent === 0 ? (j.gone ? "DEVICE EXPIRED — TURN OFF AND BACK ON" : "NO DEVICE REGISTERED — TURN OFF AND BACK ON")
+                        : `SENT TO ${j.sent} DEVICE${j.sent === 1 ? "" : "S"}`
+                      );
                     } catch { setPushMsg("DIDN'T SEND"); }
                     setTimeout(() => setPushMsg(""), 4500);
                   }}
@@ -4545,7 +4643,10 @@ function ClientDetail({ B, client, onClose, onChange, onDelete, onPortal, settin
   return (
     <Sheet B={B} onClose={onClose}>
       <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 12 }}>
-        <Monogram B={B} text={client.name.trim().charAt(0).toUpperCase()} size={48} />
+        {client.photo
+          ? <img src={`data:image/jpeg;base64,${client.photo}`} alt=""
+              style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: `1.5px solid ${B.c.line}` }} />
+          : <Monogram B={B} text={client.name.trim().charAt(0).toUpperCase()} size={48} />}
         <div style={{ flex: 1 }}>
           <div style={{ fontFamily: B.display, fontSize: 23, fontWeight: 600 }}>{client.name}</div>
           <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 2, color: B.c.accent, marginTop: 2 }}>
