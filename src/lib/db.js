@@ -197,6 +197,58 @@ export async function findClientByPhone(phone) {
   }
 }
 
+
+
+/* ------------------- WAIVER SIGNATURE -------------------
+   A client isn't signed in, so this goes through a narrow
+   database function that can only stamp their own record.   */
+export async function signWaiver(phone, waiver) {
+  try {
+    const { error } = await supabase.rpc("client_sign_waiver", { p_phone: phone, p_waiver: waiver });
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error("waiver failed:", e);
+    return false;
+  }
+}
+
+/* ------------------- CLIENT REQUESTS -------------------
+   A client asking for a waitlist spot, a reschedule, or a
+   question. Anyone may send one; only Paige can read them.   */
+export async function sendRequest(req) {
+  try {
+    const { error } = await supabase.from("client_requests").insert({
+      name: req.name || "", phone: req.phone || "", brand: req.brand || "",
+      kind: req.kind || "question", note: req.note || "", handled: false,
+    });
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error("request failed:", e);
+    return false;
+  }
+}
+
+export async function loadRequests() {
+  try {
+    const { data } = await supabase.from("client_requests").select("*")
+      .eq("handled", false).order("created_at", { ascending: false });
+    return (data || []).map((r) => ({
+      id: r.id, name: r.name, phone: r.phone, brand: r.brand,
+      kind: r.kind, note: r.note, date: (r.created_at || "").slice(0, 10),
+    }));
+  } catch (e) {
+    console.error("requests load failed:", e);
+    return [];
+  }
+}
+
+export async function clearRequest(id) {
+  try { await supabase.from("client_requests").update({ handled: true }).eq("id", id); return true; }
+  catch (e) { console.error(e); return false; }
+}
+
 /* ------------------- LIVE UPDATES ACROSS DEVICES ------------------ */
 export function onRemoteChange(cb) {
   let timer = null;
@@ -207,6 +259,7 @@ export function onRemoteChange(cb) {
     .on("postgres_changes", { event: "*", schema: "public", table: "private_data" }, bump)
     .on("postgres_changes", { event: "*", schema: "public", table: "reviews" }, bump)
     .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, bump)
+    .on("postgres_changes", { event: "*", schema: "public", table: "client_requests" }, bump)
     .subscribe();
   return () => { clearTimeout(timer); supabase.removeChannel(channel); };
 }
