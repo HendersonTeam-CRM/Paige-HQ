@@ -1014,7 +1014,7 @@ const LOAN_PURPOSE = ["Purchase","Refinance"];
 const PARTNER_TYPES= ["Realtor","Financial Advisor","CPA","Builder","Attorney","Insurance","Other"];
 const TEAM_COLORS  = IS_DEMO ? { "Jordan Maxwell":"#0033A0", "Carla (LP1)":"#787e88", "Devin (LP2)":"#0a6b34", "Sonia (LP3)":"#8a5a1e" } : { Blake:"#0033A0", Tamara:"#787e88", Donna:"#0033A0", Rachel:"#0a6b34" };
 const tierColor    = { Elite:"#e8a0c0", Diamond:"#60d4f4", Platinum:"#7f96ad" };
-const BUILD_TAG = "b0725-J8";
+const BUILD_TAG = "b0725-J9";
 function LoginScreen({T, onDone}) {
   const [email,setEmail] = useState("");
   const [pw,setPw] = useState("");
@@ -12226,69 +12226,62 @@ function App() {
           <TeamTasksCard tasks={tasks} currentUser={currentUser} T={T} HL={HL} onAdd={addTask} onToggle={toggleTask} onDelete={deleteTask}/>
         </div>
       )}
-      {/* ── NAF HUB — below Assign Tasks; tap a name to open their file ── */}
+      {/* ── NAF HUB — three columns, names only; tap a name to open (or create) their file ── */}
       {tab==="newapps" && currentUser===BOSS && nafLeads.length>0 && (()=>{
         const hrs = d => d ? Math.max(0, Math.round((Date.now()-new Date(d))/3600000)) : null;
-        const submitted = nafLeads.filter(n=>n.status==="complete");
-        const openApps = nafLeads.filter(n=>n.status!=="complete");
-        const isStalled = n => { const h=hrs(n.started_at||n.created_at); return h!=null && h>=48; };
-        const stalled = openApps.filter(isStalled);
-        const incomplete = openApps.filter(n=>!isStalled(n));
-        const digitsOf = s => String(s||"").replace(/[^0-9]/g,"");
+        const isStalled = n => { const h=hrs(n.started_at||n.created_at); return n.status!=="complete" && h!=null && h>=48; };
+        const completed  = nafLeads.filter(n=>n.status==="complete");
+        const stalled    = nafLeads.filter(isStalled);
+        const incomplete = nafLeads.filter(n=>n.status!=="complete" && !isStalled(n));
+        const dig = s => String(s||"").replace(/[^0-9]/g,"").slice(-10);
+        const low = s => String(s||"").trim().toLowerCase();
+        const findRec = (n, list) => list.find(x=>x.nafApp && x.nafApp===n.app_number)
+          || (dig(n.borrower_phone).length===10 ? list.find(x=>dig(x.phone)===dig(n.borrower_phone)) : null)
+          || (low(n.borrower_email) ? list.find(x=>low(x.email)===low(n.borrower_email)) : null)
+          || (low(n.borrower_name)  ? list.find(x=>low(x.name||x.borrower)===low(n.borrower_name)) : null)
+          || null;
         const openNafProfile = (n) => {
-          let L = leads.find(x=>x.nafApp===n.app_number);
-          if(!L && n.borrower_phone){ const d=digitsOf(n.borrower_phone); if(d.length>=7) L = leads.find(x=>digitsOf(x.phone)===d); }
-          if(!L && n.borrower_name){ const nm=String(n.borrower_name).trim().toLowerCase(); L = leads.find(x=>String(x.name||"").trim().toLowerCase()===nm); }
+          const L = findRec(n, leads);
           if(L){ setSelLead(L); return; }
-          const inDb = loans.find(x=>x.nafApp===n.app_number);
-          if(inDb){ setSelLoan(inDb); return; }
-          const made = nafToLead(n);                    // never dead-end — build the file now
+          const D2 = findRec(n, loans);
+          if(D2){ setSelLoan(D2); return; }
+          const made = nafToLead(n);            // no file yet — build it now, prefilled from the application
           setSelLead(made);
           flashSync(`Created ${made.name}'s file from their application`);
         };
-        const HubRow = (n) => {
-          const h = hrs(n.started_at || n.created_at);
-          const stale = n.status!=="complete" && h!=null && h>=48;
-          return (
-            <div key={n.app_number} className="lj-row" onClick={()=>openNafProfile(n)} style={{padding:"8px 15px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12,fontWeight:700,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.borrower_name||n.borrower_email||n.app_number}</div>
-                <div style={{fontSize:9,color:stale?T.red:T.muted,fontWeight:700,marginTop:1}}>
-                  {n.status==="complete" ? "Submitted" : (h!=null ? `Started ${h}h ago` : "Started")}
-                  {n.app_path?` \u00b7 ${n.app_path}`:""}
-                </div>
-              </div>
-              {n.borrower_phone&&<a onClick={e=>e.stopPropagation()} href={`tel:${String(n.borrower_phone).replace(/[^0-9+]/g,"")}`} style={{fontSize:10,fontWeight:800,color:T.navy,textDecoration:"none",flexShrink:0,border:`1px solid ${T.border}`,borderRadius:7,padding:"5px 9px"}}>Call</a>}
-              {n.borrower_email&&<a onClick={e=>e.stopPropagation()} href={`mailto:${n.borrower_email}`} style={{fontSize:10,fontWeight:800,color:T.navy,textDecoration:"none",flexShrink:0,border:`1px solid ${T.border}`,borderRadius:7,padding:"5px 9px"}}>Email</a>}
-            </div>
-          );
-        };
-        const HubSec = (label, items, color, cap) => {
-          if(!items.length) return null;
-          const shown = cap ? items.slice(0,cap) : items;
-          return (<Fragment key={label}>
-            <div style={{padding:"6px 15px",background:T.inner,borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"baseline",gap:8}}>
-              <span style={{fontSize:8.5,fontWeight:800,color,letterSpacing:"0.08em",textTransform:"uppercase"}}>{label}</span>
+        const HubCol = ({label, items, color}) => (
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"baseline",gap:6,padding:"0 2px 5px",borderBottom:`1.5px solid ${color}`,marginBottom:6}}>
+              <span style={{fontSize:8.5,fontWeight:900,color,letterSpacing:"0.07em",textTransform:"uppercase",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</span>
               <span style={{marginLeft:"auto",fontSize:9,fontWeight:800,color:T.muted}}>{items.length}</span>
             </div>
-            {shown.map(HubRow)}
-            {cap&&items.length>cap&&<div style={{padding:"6px 15px",fontSize:9,color:T.ghost,fontWeight:700}}>+{items.length-cap} more</div>}
-          </Fragment>);
-        };
+            {items.length===0
+              ? <div style={{fontSize:9,color:T.ghost,fontStyle:"italic",padding:"2px"}}>None</div>
+              : items.map(n=>{
+                  const linked = !!(findRec(n,leads)||findRec(n,loans));
+                  return (
+                    <div key={n.app_number} className="lj-row" onClick={()=>openNafProfile(n)}
+                      style={{background:T.inner,border:`1px solid ${T.border}`,borderRadius:8,padding:"6px 8px",marginBottom:4,cursor:"pointer"}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {n.borrower_name||n.borrower_email||n.app_number}
+                      </div>
+                      {!linked&&<div style={{fontSize:8,color:T.gold,fontWeight:800,marginTop:1}}>tap to create file</div>}
+                    </div>
+                  );
+                })}
+          </div>
+        );
         return (
-          <div style={{margin:"12px 20px 0",borderRadius:10,overflow:"hidden",border:`1px solid ${T.gold}66`,background:T.card}}>
+          <div style={{margin:"12px 20px 0",borderRadius:10,border:`1px solid ${T.gold}66`,background:T.card,overflow:"hidden"}}>
             <div style={{padding:"11px 15px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"baseline",gap:8,background:`${T.gold}10`}}>
               <div style={{fontSize:12,fontWeight:800,color:T.text2,letterSpacing:"0.04em",textTransform:"uppercase"}}>NAF Hub</div>
-              <span style={{marginLeft:"auto",fontSize:10.5,fontWeight:900,color:T.gold}}>
-                {openApps.length ? `${openApps.length} open` : `${submitted.length} submitted`}
-              </span>
+              <span style={{marginLeft:"auto",fontSize:10.5,fontWeight:900,color:T.gold}}>{nafLeads.length} application{nafLeads.length===1?"":"s"}</span>
             </div>
-            <div style={{padding:"7px 15px 5px",fontSize:9.5,color:T.muted,lineHeight:1.5}}>
-              Every application lands in New Loans automatically, flagged priority. Tap a name to open their file.
+            <div style={{display:"flex",gap:8,padding:"10px 13px 12px",alignItems:"flex-start"}}>
+              <HubCol label="Completed"  items={completed}  color={T.green}/>
+              <HubCol label="Incomplete" items={incomplete} color={T.gold}/>
+              <HubCol label="Stalled"    items={stalled}    color={T.red}/>
             </div>
-            {HubSec("Incomplete", incomplete, T.gold)}
-            {HubSec("Stalled \u00b7 48h+", stalled, T.red)}
-            {HubSec("Submitted", submitted, T.green, 8)}
           </div>
         );
       })()}
