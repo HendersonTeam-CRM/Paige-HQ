@@ -943,7 +943,7 @@ export default function PaigeHQ() {
         {tab === "settings" && mode === "paige" && (
           <SettingsTab B={B} bizCfg={bizCfg} saveBizCfg={saveBizCfg} leads={leads} saveLeads={saveLeads} alerts={alerts} saveAlerts={saveAlerts}
             settings={settings} saveSettings={saveSettings} exportAll={exportAll} importAll={importAll} reviews={reviews} saveReviews={saveReviews}
-            gallery={gallery} saveGallery={saveGallery} clients={clients} />
+            gallery={gallery} saveGallery={saveGallery} clients={clients} requests={requests} />
         )}
         {tab === "home" && (brandKey === "hub"
           ? <HubHome onGo={(k) => { switchBrand(k); setTab("home"); }} mkqLive={mkqLive} mkqDate={mkqSource?.date} daysToMkq={daysToMkq}
@@ -3086,7 +3086,7 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
 }
 
 /* ================= SETTINGS (Paige only) ================= */
-function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAlerts, settings = {}, saveSettings, exportAll, importAll, reviews = [], saveReviews, gallery = [], saveGallery, clients = [] }) {
+function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAlerts, settings = {}, saveSettings, exportAll, importAll, reviews = [], saveReviews, gallery = [], saveGallery, clients = [], requests = [] }) {
   const { Field, input, Primary, Ghost, chip, card, H } = useBrandBits(B);
   const defFor = (k) => ({ services: BRANDS[k].services.map((s) => ({ ...s })), hours: BRANDS[k].hours.map((h) => [...h]) });
   const [bk, setBk] = useState("pp");
@@ -3266,6 +3266,14 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
         <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 9px", lineHeight: 1.6 }}>
           Off, the page collects interest. On, it asks for entries. Either way the names land in your Needs Attention list.
         </p>
+        <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.5, color: B.c.faint, marginBottom: 4 }}>YOUR BOMBYHEAD REGISTRATION LINK</div>
+        <input style={{ ...input, fontSize: 12.5, marginBottom: 10 }} placeholder="https://bombyhead.com/p/your-pageant"
+          defaultValue={settings.mkqUrl || ""}
+          onBlur={(e) => { saveSettings({ ...settings, mkqUrl: e.target.value.trim() }); toast("Registration link saved"); }} />
+        <p style={{ fontSize: 11.5, fontWeight: 300, color: B.c.faint, margin: "0 0 11px", lineHeight: 1.6 }}>
+          Where REGISTER ON BOMBYHEAD sends people. Grab it from your Bombyhead dashboard — it's the same address year after year.
+        </p>
+
         <textarea style={{ ...input, minHeight: 66 }} placeholder="What the page should say (optional — leave blank for the default)"
           defaultValue={settings.mkqBlurb || ""}
           onBlur={(e) => saveSettings({ ...settings, mkqBlurb: e.target.value.trim() })} />
@@ -3421,6 +3429,74 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       </>)}
 
       {pane === "clients" && (<>
+      {/* MKQ contestants */}
+      {(() => {
+        const entries = requests.filter((r) => r.kind === "mkq");
+        const divOf = (note) => {
+          const m = String(note || "").match(/Division:\s*([^(·]+)/);
+          return m ? m[1].trim() : "Not chosen yet";
+        };
+        const feeOf = (note) => {
+          const m = String(note || "").match(/Total:\s*\$(\d+)/);
+          return m ? Number(m[1]) : 0;
+        };
+        const grouped = {};
+        entries.forEach((r) => { const d = divOf(r.note); (grouped[d] = grouped[d] || []).push(r); });
+        const order = MKQ_DIVISIONS.map((d) => d.name);
+        const keys = Object.keys(grouped).sort((a, b) => {
+          const ia = order.findIndex((n) => a.startsWith(n)), ib = order.findIndex((n) => b.startsWith(n));
+          return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+        });
+        const owed = entries.reduce((s, r) => s + feeOf(r.note), 0);
+
+        return (
+          <>
+            <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 3, color: B.c.faint, margin: "0 0 8px" }}>
+              ♛ MISS KENTUCKY'S QUEEN · {entries.length} INTERESTED
+            </div>
+            <div style={{ ...card, padding: 14, marginBottom: 20 }}>
+              {entries.length === 0 ? (
+                <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: 0, lineHeight: 1.6 }}>
+                  Nobody yet. Anyone who asks to be kept posted lands here, grouped by the division they're eyeing. Actual entries live in Bombyhead.
+                </p>
+              ) : (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingBottom: 10, marginBottom: 4, borderBottom: `1px solid ${B.c.line}` }}>
+                    <span className="hq-mono" style={{ fontSize: 8, letterSpacing: 2, color: B.c.faint }}>IF THEY ALL ENTER</span>
+                    <span className="hq-mono" style={{ fontSize: 16, fontWeight: 500, color: "#4E6B4E" }}>{money(owed)}</span>
+                  </div>
+                  {keys.map((k) => (
+                    <div key={k} style={{ paddingTop: 10 }}>
+                      <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 2, color: B.c.accent, fontWeight: 700, marginBottom: 5 }}>
+                        {k.toUpperCase()} · {grouped[k].length}
+                      </div>
+                      {grouped[k].map((r) => {
+                        const ph = String(r.phone || "").replace(/\D/g, "").slice(-10);
+                        return (
+                          <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 0", borderBottom: `1px solid ${B.c.line}` }}>
+                            <span style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ display: "block", fontSize: 13.5, fontWeight: 400 }}>{r.name}</span>
+                              <span className="hq-mono" style={{ display: "block", fontSize: 7, letterSpacing: 1, color: B.c.faint, marginTop: 2 }}>
+                                {String(r.note || "").replace(/Division:[^·]*·\s*/, "").slice(0, 70).toUpperCase()}
+                              </span>
+                            </span>
+                            {ph && (
+                              <a href={`sms:+1${ph}`} className="hq-mono hq-press"
+                                style={{ padding: "5px 11px", borderRadius: 3, border: `1px solid ${B.c.accent}`, color: B.c.accent,
+                                  fontSize: 8, letterSpacing: 1.4, textDecoration: "none", fontWeight: 700, flexShrink: 0 }}>TEXT</a>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </>
+        );
+      })()}
+
       {/* Client portal invites */}
       <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 3, color: B.c.faint, margin: "0 0 8px" }}>CLIENT PORTAL INVITES</div>
       <div style={{ ...card, padding: 14, marginBottom: 20 }}>
@@ -3974,22 +4050,78 @@ function GalleryPage({ B, lock }) {
   );
 }
 
+/* ================= MISS KENTUCKY'S QUEEN — the pageant itself =================
+   October 3, 2026 · Grayson County Middle School, Leitchfield, Kentucky
+   Directed by Paige Henderson & Chandra Hornback                          */
+const MKQ = {
+  date: "2026-10-03",
+  venue: "Grayson County Middle School",
+  city: "Leitchfield, Kentucky",
+  tagline: "A new era of Kentucky pageantry",
+  values: ["Beauty", "Confidence", "Communication", "Character", "Community"],
+  addOn: { name: "Overall Photogenic", price: 10, unit: "per photo" },
+  /* Registration runs on Bombyhead. Paige pastes her pageant's link in
+     Settings → CLIENTS; until then this is where people land.          */
+  registerUrl: "https://bombyhead.com",
+  sessions: [
+    {
+      id: "one", name: "Session One", fee: 100, blurb: "Baby · Toddler · Tiny",
+      divisions: [
+        { id: "baby", name: "Baby Miss", age: "0–12 months", areas: [["Evening Gown", null]] },
+        { id: "toddler", name: "Toddler Miss", age: "13–24 months", areas: [["Evening Gown", null]] },
+        { id: "tiny", name: "Tiny Miss", age: "2–3 years", areas: [["Fun Fashion", null], ["Evening Gown", null]] },
+      ],
+    },
+    {
+      id: "two", name: "Session Two", fee: 180, blurb: "Little · Junior · Preteen",
+      divisions: [
+        { id: "little", name: "Little Miss", age: "4–6 years", areas: [["Evening Gown", 30], ["Fun Fashion", 30], ["Interview", 40]] },
+        { id: "junior", name: "Junior Miss", age: "7–9 years", areas: [["Evening Gown", 30], ["Fun Fashion", 30], ["Interview", 40]] },
+        { id: "preteen", name: "Preteen Miss", age: "10–13 years", areas: [["Evening Gown", 30], ["Fun Fashion", 30], ["Interview", 40]] },
+      ],
+    },
+    {
+      id: "three", name: "Session Three", fee: 225, blurb: "Teen · Miss · Ms · Mrs",
+      divisions: [
+        { id: "teen", name: "Teen Miss", age: "14–17 years", areas: [["Intro", 10], ["Evening Gown", 25], ["Fitness", 25], ["Interview", 40]] },
+        { id: "miss", name: "Miss", age: "18–23 years", areas: [["Intro", 10], ["Evening Gown", 25], ["Swim", 25], ["Interview", 40]] },
+        { id: "ms", name: "Ms", age: "24+ years", areas: [["Intro", 10], ["Evening Gown", 25], ["Fitness / Swim", 25], ["Interview", 40]] },
+        { id: "mrs", name: "Mrs.", age: "24+ years", areas: [["Intro", 10], ["Evening Gown", 25], ["Fitness / Swim", 25], ["Interview", 40]] },
+      ],
+    },
+  ],
+};
+
+/* every division flattened, for pickers and rosters */
+const MKQ_DIVISIONS = MKQ.sessions.flatMap((s) =>
+  s.divisions.map((d) => ({ ...d, session: s.name, sessionId: s.id, fee: s.fee }))
+);
+const mkqDivision = (id) => MKQ_DIVISIONS.find((d) => d.id === id) || null;
+
 /* ================= MKQ PUBLIC (client-facing) ================= */
 function MkqPublic({ B, settings = {} }) {
   const cd = useMkqCountdown();
   const open = !!settings.mkqOpen;
-  const [form, setForm] = useState({ name: "", age: "", division: "", parent: "", phone: "", email: "" });
+  const [openSession, setOpenSession] = useState("one");
+  const [form, setForm] = useState({ name: "", age: "", division: "", parent: "", phone: "", email: "", photogenic: 0 });
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const chosen = mkqDivision(form.division);
+  const total = (chosen ? chosen.fee : 0) + Number(form.photogenic || 0) * MKQ.addOn.price;
+  const regUrl = (settings.mkqUrl || MKQ.registerUrl).trim();
   const ok = form.name.trim() && form.phone.trim();
+
+  const TEAL = "#6EC1D6", DEEP = "#0E7C80", INK = "#06070A";
 
   const submit = async () => {
     if (!ok) return;
     setBusy(true);
     const note = [
-      `Contestant: ${form.name.trim()}`,
+      `Division: ${chosen.name} (${chosen.age}) — ${chosen.session}`,
+      `Entry fee: $${chosen.fee}`,
+      form.photogenic ? `Photogenic: ${form.photogenic} photo(s) — $${form.photogenic * MKQ.addOn.price}` : "",
+      `Total: $${total}`,
       form.age ? `Age ${form.age}` : "",
-      form.division ? `Division: ${form.division}` : "",
       form.parent ? `Parent: ${form.parent}` : "",
       form.email ? `Email: ${form.email}` : "",
     ].filter(Boolean).join(" · ");
@@ -4009,76 +4141,176 @@ function MkqPublic({ B, settings = {} }) {
 
   return (
     <div className="hq-fade">
-      <div style={{ background: "linear-gradient(165deg, #06070A 12%, #0F1418 100%)", borderRadius: 12, padding: "18px 16px 16px", marginBottom: 12, textAlign: "center", boxShadow: "0 4px 16px rgba(0,0,0,.30)" }}>
+      {/* the lockup */}
+      <div style={{ background: `linear-gradient(170deg, ${INK} 10%, #101A1E 100%)`, borderRadius: 12, padding: "18px 16px 16px", marginBottom: 12, textAlign: "center", boxShadow: "0 4px 18px rgba(0,0,0,.34)" }}>
         <img src={MKQ_LOGO} alt="Miss Kentucky's Queen" style={{ width: "86%", maxWidth: 320, display: "block", margin: "0 auto" }} />
         {open && (
           <div style={{ marginTop: 13 }}>
-            <span className="hq-mono hq-live" style={{ fontSize: 10, padding: "6px 15px 6px 11px" }}>REGISTRATION IS NOW LIVE</span>
+            <span className="hq-mono hq-live" style={{ fontSize: 10, padding: "6px 15px 6px 11px" }}>REGISTRATION NOW OPEN</span>
+          </div>
+        )}
+        <div style={{ fontFamily: B.display, fontSize: 15, fontStyle: "italic", color: TEAL, marginTop: 13 }}>{MKQ.tagline}</div>
+        <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 2, color: "#FFFFFF", marginTop: 11, lineHeight: 1.9 }}>
+          OCTOBER 3, 2026<br />
+          <span style={{ color: TEAL }}>{MKQ.venue.toUpperCase()}</span><br />
+          <span style={{ color: TEAL }}>{MKQ.city.toUpperCase()}</span>
+        </div>
+        <div className="hq-mono" style={{ fontSize: 7, letterSpacing: 1.6, color: "#9FB6BE", marginTop: 12, lineHeight: 2 }}>
+          {MKQ.values.map((v) => v.toUpperCase()).join(" · ")}
+        </div>
+        <div className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.6, color: "#7FA9B4", marginTop: 10 }}>
+          DIRECTED BY PAIGE HENDERSON &amp; CHANDRA HORNBACK
+        </div>
+        {cd.diff > 0 && (
+          <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 2, color: TEAL, marginTop: 12 }}>
+            {cd.d} DAYS TO GO
           </div>
         )}
       </div>
 
-      <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,.32)", marginBottom: 14 }}>
-        <img src={MKQ_POSTER} alt="Miss Kentucky's Queen — October 3, 2026" style={{ width: "100%", display: "block" }} />
-        <CountdownPill cd={cd} />
+      {/* sessions, ages and how they're judged */}
+      <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: B.c.faint, margin: "0 0 9px" }}>DIVISIONS &amp; ENTRY FEES</div>
+      {MKQ.sessions.map((s) => {
+        const isOpen = openSession === s.id;
+        return (
+          <div key={s.id} style={{ borderRadius: 11, overflow: "hidden", marginBottom: 9,
+            background: `linear-gradient(170deg, ${INK} 10%, #111C21 100%)`, boxShadow: "0 3px 14px rgba(0,0,0,.28)" }}>
+            <button onClick={() => setOpenSession(isOpen ? "" : s.id)}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "15px 16px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontFamily: B.display, fontSize: 19, fontWeight: 600, letterSpacing: 1.5, color: "#FFFFFF", lineHeight: 1.1 }}>
+                  {s.name.toUpperCase()}
+                </span>
+                <span className="hq-mono" style={{ display: "block", fontSize: 7.5, letterSpacing: 1.8, color: TEAL, marginTop: 5 }}>
+                  {s.blurb.toUpperCase()}
+                </span>
+              </span>
+              <span style={{ textAlign: "right", flexShrink: 0 }}>
+                <span style={{ display: "block", fontFamily: B.display, fontSize: 24, fontWeight: 600, color: "#FFFFFF", lineHeight: 1 }}>${s.fee}</span>
+                <span className="hq-mono" style={{ display: "block", fontSize: 6, letterSpacing: 1.4, color: "#7FA9B4", marginTop: 3 }}>PER CONTESTANT</span>
+              </span>
+              <span style={{ color: TEAL, fontSize: 12, flexShrink: 0 }}>{isOpen ? "▾" : "▸"}</span>
+            </button>
+
+            {isOpen && (
+              <div className="hq-fade" style={{ padding: "0 16px 15px" }}>
+                {s.divisions.map((d) => (
+                  <div key={d.id} style={{ paddingTop: 12, marginTop: 12, borderTop: "1px solid rgba(110,193,214,.22)" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 9 }}>
+                      <span style={{ fontFamily: B.display, fontSize: 17, fontWeight: 600, color: "#FFFFFF" }}>{d.name}</span>
+                      <span className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.4, color: TEAL }}>{d.age.toUpperCase()}</span>
+                    </div>
+                    <div className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.6, color: "#7FA9B4", margin: "8px 0 5px" }}>
+                      {d.areas.some(([, w]) => w) ? "AREAS OF COMPETITION" : "COMPETITION"}
+                    </div>
+                    {d.areas.map(([area, weight]) => (
+                      <div key={area} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "3px 0" }}>
+                        <span style={{ fontSize: 13, fontWeight: 300, color: "#DCE9ED" }}>• {area}</span>
+                        {weight ? <span className="hq-mono" style={{ fontSize: 11, color: TEAL }}>{weight}%</span> : null}
+                      </div>
+                    ))}
+                    {open && (
+                      <button onClick={() => { setForm({ ...form, division: d.id }); try { document.getElementById("mkq-entry").scrollIntoView({ behavior: "smooth", block: "start" }); } catch {} }}
+                        className="hq-mono hq-press"
+                        style={{ marginTop: 9, padding: "8px 15px", borderRadius: 999, cursor: "pointer", border: `1px solid ${TEAL}`,
+                          background: form.division === d.id ? TEAL : "transparent", color: form.division === d.id ? INK : TEAL,
+                          fontSize: 7.5, letterSpacing: 1.5, fontWeight: 700 }}>
+                        {form.division === d.id ? "SELECTED ✓" : "REGISTER FOR THIS"}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* add-on */}
+      <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "13px 15px", borderRadius: 10, marginBottom: 12,
+        background: `linear-gradient(170deg, ${INK} 10%, #111C21 100%)`, boxShadow: "0 3px 12px rgba(0,0,0,.24)" }}>
+        <Icon name="camera" size={22} color={TEAL} />
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "block", fontFamily: B.display, fontSize: 16, fontWeight: 600, color: "#FFFFFF" }}>{MKQ.addOn.name}</span>
+          <span className="hq-mono" style={{ display: "block", fontSize: 7, letterSpacing: 1.4, color: "#7FA9B4", marginTop: 3 }}>OPTIONAL ADD-ON</span>
+        </span>
+        <span className="hq-mono" style={{ fontSize: 13, color: TEAL, whiteSpace: "nowrap" }}>${MKQ.addOn.price}<span style={{ fontSize: 7, color: "#7FA9B4" }}> {MKQ.addOn.unit.toUpperCase()}</span></span>
       </div>
 
-      <div style={{ background: B.c.card, border: `1px solid ${B.c.line}`, borderRadius: 8, padding: "16px 18px", textAlign: "center", marginBottom: 12 }}>
-        <div style={{ fontFamily: B.display, fontSize: 20, fontWeight: 600, letterSpacing: 1 }}>♛ Miss Kentucky's Queen</div>
-        <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 2, color: B.c.faint, margin: "6px 0 10px" }}>
-          OCTOBER 3, 2026 · DIRECTED BY PAIGE HENDERSON &amp; CHANDRA HORNBACK
-        </div>
-        <p style={{ fontSize: 13.5, fontWeight: 300, lineHeight: 1.7, margin: 0 }}>
-          {settings.mkqBlurb ||
-            (open
-              ? "Registration is open. Put your name down below and we'll be in touch with the packet, divisions and fees."
-              : "Entry details, divisions and venue announced soon — watch this page. Ask Coach Paige at your next lesson to get your name on the list early.")}
-        </p>
-      </div>
+      {/* register — on Bombyhead, where the pageant actually runs */}
+      <div id="mkq-entry" style={{ padding: "18px 18px 17px", borderRadius: 12,
+        background: `linear-gradient(170deg, ${INK} 10%, #101A1E 100%)`, boxShadow: "0 4px 16px rgba(0,0,0,.30)" }}>
+        {open ? (
+          <>
+            <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: TEAL, marginBottom: 5, textAlign: "center" }}>
+              REGISTRATION IS OPEN
+            </div>
+            <p style={{ fontSize: 13, fontWeight: 300, color: "#9FB6BE", lineHeight: 1.7, margin: "0 0 15px", textAlign: "center" }}>
+              Entries are handled on Bombyhead — pick your division, pay your fee, and upload photos all in one place.
+              {chosen ? <><br /><span style={{ color: "#FFFFFF" }}>You picked {chosen.name} · ${chosen.fee}</span></> : null}
+            </p>
 
-      {/* Entry form */}
-      <div style={{ padding: "17px 18px", borderRadius: 12,
-        background: `linear-gradient(160deg, ${B.c.deep} 20%, ${B.c.deep2} 100%)`, boxShadow: "0 4px 16px rgba(0,0,0,.26)" }}>
-        {sent ? (
+            <a href={regUrl} target="_blank" rel="noreferrer" className="hq-mono hq-press"
+              style={{ display: "block", padding: "17px 0", borderRadius: 8, textAlign: "center", textDecoration: "none",
+                background: `linear-gradient(95deg, ${DEEP}, #12939A 45%, ${TEAL})`, color: INK,
+                fontSize: 12, letterSpacing: 2.5, fontWeight: 700, boxShadow: "0 4px 14px rgba(14,124,128,.36)" }}>
+              REGISTER ON BOMBYHEAD →
+            </a>
+
+            <p className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.2, color: "#7FA9B4", textAlign: "center", marginTop: 11, lineHeight: 1.9 }}>
+              A PARENT SHOULD REGISTER ANYONE UNDER 18<br />
+              QUESTIONS? TEXT PAIGE &mdash; SHE DIRECTS THIS ONE
+            </p>
+
+            <a href={`sms:+1${String(BRANDS.re.phone).replace(/\D/g, "").slice(-10)}`} className="hq-mono hq-press"
+              style={{ display: "block", marginTop: 12, padding: "12px 0", borderRadius: 7, textAlign: "center", textDecoration: "none",
+                border: `1px solid ${TEAL}`, color: TEAL, fontSize: 9.5, letterSpacing: 2, fontWeight: 700 }}>
+              TEXT PAIGE ABOUT THE PAGEANT
+            </a>
+          </>
+        ) : sent ? (
           <div style={{ textAlign: "center", padding: "10px 0" }}>
-            <div style={{ fontSize: 24, color: B.c.gold }}>♛</div>
+            <div style={{ fontSize: 24, color: TEAL }}>♛</div>
             <div style={{ fontFamily: B.display, fontSize: 19, fontWeight: 600, color: "#FFFFFF", marginTop: 8 }}>You're on the list</div>
-            <p style={{ fontSize: 13, fontWeight: 300, color: B.c.soft, opacity: 0.9, lineHeight: 1.7, margin: "7px 0 0" }}>
-              Paige or Chandra will reach out with everything you need. See you October 3rd.
+            <p style={{ fontSize: 13, fontWeight: 300, color: "#9FB6BE", lineHeight: 1.7, margin: "7px 0 0" }}>
+              You'll hear from Paige the moment registration opens.
             </p>
           </div>
         ) : (
           <>
-            <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: B.c.gold, marginBottom: 4 }}>
-              {open ? "ENTER THE PAGEANT" : "GET ON THE LIST EARLY"}
-            </div>
-            <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.soft, opacity: 0.85, lineHeight: 1.6, margin: "0 0 13px" }}>
-              {open
-                ? "Fill this in and we'll send the entry packet."
-                : "Not an entry yet — just tells us you're interested, and you'll hear first when registration opens."}
+            <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: TEAL, marginBottom: 4 }}>GET ON THE LIST EARLY</div>
+            <p style={{ fontSize: 12.5, fontWeight: 300, color: "#9FB6BE", lineHeight: 1.6, margin: "0 0 13px" }}>
+              Registration opens on Bombyhead soon. Leave your details and you'll hear first.
             </p>
-            {field("name", "Contestant's name")}
-            <div style={{ display: "flex", gap: 9 }}>
-              <div style={{ flex: 0.7 }}>{field("age", "Age", "number")}</div>
-              <div style={{ flex: 1.3 }}>{field("division", "Division, if you know it")}</div>
+            <div style={{ marginBottom: 9 }}>
+              <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.5, color: "#7FA9B4", marginBottom: 4 }}>DIVISION YOU'RE EYEING</div>
+              <select value={form.division} onChange={(e) => setForm({ ...form, division: e.target.value })}
+                style={{ width: "100%", padding: "12px 13px", fontSize: 15, border: "1px solid rgba(255,255,255,.22)", borderRadius: 6,
+                  background: "rgba(255,255,255,.06)", color: "#EAF6F8", boxSizing: "border-box" }}>
+                <option value="">Not sure yet</option>
+                {MKQ.sessions.map((s2) => (
+                  <optgroup key={s2.id} label={`${s2.name} — $${s2.fee}`}>
+                    {s2.divisions.map((d) => <option key={d.id} value={d.id}>{d.name} · {d.age}</option>)}
+                  </optgroup>
+                ))}
+              </select>
             </div>
+            {field("name", "Contestant's name")}
             {field("parent", "Parent or guardian")}
             {field("phone", "Phone", "tel")}
             {field("email", "Email", "email")}
-            <button onClick={submit} disabled={!ok || busy} className="hq-press"
+            <button onClick={submit} disabled={!form.name.trim() || !form.phone.trim() || busy} className="hq-press"
               style={{ width: "100%", marginTop: 4, padding: 15, borderRadius: 7, border: "none", cursor: "pointer",
-                background: ok && !busy ? B.c.metal : "rgba(255,255,255,.18)",
-                color: ok && !busy ? B.c.deep : "rgba(255,255,255,.55)", fontSize: 11, letterSpacing: 2.5, fontWeight: 700 }}>
-              {busy ? "SENDING…" : open ? "REQUEST MY ENTRY PACKET" : "KEEP ME POSTED"}
+                background: form.name.trim() && form.phone.trim() && !busy ? `linear-gradient(95deg, ${DEEP}, #12939A 45%, ${TEAL})` : "rgba(255,255,255,.16)",
+                color: form.name.trim() && form.phone.trim() && !busy ? INK : "rgba(255,255,255,.55)", fontSize: 11, letterSpacing: 2.5, fontWeight: 700 }}>
+              {busy ? "SENDING…" : "KEEP ME POSTED"}
             </button>
-            <p className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.2, color: B.c.soft, opacity: 0.55, textAlign: "center", marginTop: 10, lineHeight: 1.8 }}>
-              A PARENT SHOULD FILL THIS IN FOR ANYONE UNDER 18
-            </p>
           </>
         )}
       </div>
     </div>
   );
+
 }
 
 /* ================= REALTY STUDIO ================= */
