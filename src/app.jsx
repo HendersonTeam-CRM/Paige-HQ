@@ -601,6 +601,7 @@ const prettyTime = (t) => {
 };
 
 function useBrandBits(B) {
+  return useMemo(() => {
   const Label = ({ children }) => <span style={{ display: "block", fontSize: 10, fontWeight: 500, letterSpacing: 2, textTransform: "uppercase", color: B.c.faint, marginBottom: 6 }}>{children}</span>;
   const Field = ({ label, children }) => <label style={{ display: "block", marginBottom: 14 }}><Label>{label}</Label>{children}</label>;
   const input = { width: "100%", padding: "12px 14px", fontSize: 16, border: `1px solid ${B.c.line}`, borderRadius: 6, background: B.c.card, color: B.c.ink, fontWeight: 400 };
@@ -620,6 +621,7 @@ function useBrandBits(B) {
   const card = { background: B.c.card, borderRadius: 8, border: `1px solid ${B.c.line}`, boxShadow: "0 1px 2px rgba(20,15,10,.04)" };
   const H = ({ children, size = 22 }) => <div style={{ fontFamily: B.display, fontSize: size, fontWeight: 600, letterSpacing: B.key === "vg" ? 2 : 0.5 }}>{children}</div>;
   return { Field, Label, input, Primary, Ghost, chip, card, H };
+  }, [B]);
 }
 
 const Sheet = ({ B, onClose, children }) => (
@@ -722,9 +724,15 @@ export default function PaigeHQ() {
   };
 
   const portalTheme = settings.portalTheme || "blush";
-  const B = mode === "paige"
-    ? { ...BRANDS.hub, c: (PORTAL_THEMES[portalTheme] || PORTAL_THEMES.blush).c }
-    : BRANDS[brandKey];
+  /* Keep this object stable. It feeds useBrandBits, and if it changes identity
+     every render then Field/Primary/H are new component types every keystroke —
+     React throws the input away and focus goes with it. */
+  const B = useMemo(
+    () => (mode === "paige"
+      ? { ...BRANDS.hub, c: (PORTAL_THEMES[portalTheme] || PORTAL_THEMES.blush).c }
+      : BRANDS[brandKey]),
+    [mode, brandKey, portalTheme]
+  );
 
   useEffect(() => {
     (async () => {
@@ -1036,7 +1044,7 @@ export default function PaigeHQ() {
         {tab === "settings" && mode === "paige" && (
           <SettingsTab B={B} bizCfg={bizCfg} saveBizCfg={saveBizCfg} leads={leads} saveLeads={saveLeads} alerts={alerts} saveAlerts={saveAlerts}
             settings={settings} saveSettings={saveSettings} exportAll={exportAll} importAll={importAll} reviews={reviews} saveReviews={saveReviews}
-            gallery={gallery} saveGallery={saveGallery} clients={clients} requests={requests} />
+            gallery={gallery} saveGallery={saveGallery} clients={clients} saveClients={saveClients} requests={requests} pageants={pageants} savePageants={savePageants} />
         )}
         {tab === "home" && (brandKey === "hub"
           ? <HubHome onGo={(k) => { switchBrand(k); setTab("home"); }} mkqLive={mkqLive} mkqDate={mkqSource?.date} daysToMkq={daysToMkq}
@@ -2041,13 +2049,13 @@ function MyPortal({ B, onExit }) {
       {myPhotos.length > 0 && (
         <div style={{ ...card, padding: "13px 15px", marginBottom: 12 }}>
           <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 2.5, color: br.c.accent, fontWeight: 700, marginBottom: 9 }}>
-            YOUR PHOTOS · {myPhotos.length}
+YOUR GLOWS · {myPhotos.length}
           </div>
           <div style={{ display: "flex", gap: 9, overflowX: "auto", paddingBottom: 4 }}>
             {myPhotos.map((g) => (
               <div key={g.id} style={{ flex: "0 0 auto", width: 150 }}>
                 <div style={{ display: "flex", gap: 3 }}>
-                  {["before", "after"].map((k) => (
+                  {(g.beforeId ? ["before", "after"] : ["after"]).map((k) => (
                     <div key={k} style={{ flex: 1, position: "relative", borderRadius: 5, overflow: "hidden", background: hub.c.soft }}>
                       {photoSrc[g[k + "Id"]]
                         ? <img src={`data:image/jpeg;base64,${photoSrc[g[k + "Id"]]}`} alt={k} style={{ width: "100%", height: 108, objectFit: "cover", display: "block" }} />
@@ -2604,6 +2612,20 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
     .filter((x) => x && x.days >= 21)
     .sort((a, b) => b.days - a.days)
     .slice(0, 3);
+  /* came once, never came back — invisible until now */
+  const neverBack = clients
+    .map((c) => {
+      const seen = (c.history || []).length;
+      if (seen !== 1) return null;
+      const last = (c.history || [])[0];
+      const days = last && last.date ? Math.floor((Date.now() - new Date(last.date + "T12:00")) / 86400000) : 0;
+      if (days < 30) return null;
+      return { id: c.id, name: c.name, phone: (c.phone || "").replace(/\D/g, ""), days, what: c.biz?.VG ? "glow" : "lesson" };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.days - a.days)
+    .slice(0, 2);
+
   const rebookMsg = (o) => {
     const first = o.name.split(" ")[0];
     return o.what === "glow"
@@ -2831,7 +2853,7 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
       </div>
 
       {/* Needs attention — dark so it pops */}
-      {(overdue.length > 0 || leads.length > 0 || requests.some((r) => r.kind !== "waitlist")) && (
+      {(overdue.length > 0 || neverBack.length > 0 || leads.length > 0 || requests.some((r) => r.kind !== "waitlist")) && (
         <div style={{ padding: "14px 15px", borderRadius: 10, borderLeft: `3px solid ${B.c.accent}`,
           background: `linear-gradient(165deg, ${B.c.deep} 10%, ${B.c.deep2} 100%)`, boxShadow: "0 4px 14px rgba(20,15,10,.22)" }}>
           <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 2.5, color: B.c.gold, fontWeight: 500, marginBottom: 7 }}>NEEDS ATTENTION</div>
@@ -2872,6 +2894,20 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
               )}
             </div>
           ))}
+          {neverBack.map((o) => (
+            <div key={"nb" + o.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,.12)" }}>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 300, minWidth: 0, color: B.c.soft }}>
+                {o.name} came once and never came back
+                <span className="hq-mono" style={{ fontSize: 8, color: B.c.gold, opacity: 0.7 }}> · {o.days}D</span>
+              </span>
+              {o.phone && (
+                <a href={`sms:+1${o.phone}?&body=${encodeURIComponent(`Hey ${o.name.split(" ")[0]}! It has been a while — I would love to get you back in. Want me to save you a ${o.what} spot? – Paige`)}`}
+                  className="hq-mono hq-press"
+                  style={{ padding: "5px 11px", borderRadius: 3, border: `1px solid ${B.c.gold}`, color: B.c.gold, fontSize: 8.5, letterSpacing: 1.5, textDecoration: "none", fontWeight: 500, flexShrink: 0 }}>TEXT</a>
+              )}
+            </div>
+          ))}
+
           {leads.length > 0 && (
             <div style={{ fontSize: 13, fontWeight: 300, padding: "6px 0 1px", color: B.c.soft }}>
               <span style={{ color: B.c.gold }}>◈</span> {leads.length} home valuation request{leads.length === 1 ? "" : "s"} waiting in Settings
@@ -3104,7 +3140,7 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
     const code = key === "vg" ? "VG" : "PP";
     const rs = reviews.filter((r) => r.brand === code && r.approved !== false);
     const avg = rs.length ? Math.round((rs.reduce((s, r) => s + (r.rating || 5), 0) / rs.length) * 10) / 10 : 0;
-    return rs.length ? `★ ${avg} (${rs.length})` : "SEE MORE";
+    return rs.length ? `★ ${avg} (${rs.length})` : "";
   };
   const bookCard = (br, tagline, cta, hrs) => {
     const stats = brandStats(br.key);
@@ -3123,7 +3159,7 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
           </div>
           <div style={{ fontSize: 13, fontWeight: 300, color: br.c.soft, opacity: 0.88, marginTop: 8, lineHeight: 1.5 }}>{tagline}</div>
           <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.5, color: br.c.gold, opacity: 0.72, marginTop: 9 }}>
-            {stats}{hrs ? ` · ${hrs}` : ""}
+            {[stats, hrs].filter(Boolean).join(" · ")}
           </div>
         </div>
         <div className="hq-mono"
@@ -3176,7 +3212,7 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
             { key: "vg", title: "VELVET\nGLOW", line: "Custom airbrush tanning", cta: "TANNING",
               bg: `radial-gradient(140% 180% at 50% -30%, ${vg.c.deep2} 0%, ${vg.c.deep} 72%)`, mark: vg.mark, ink: vg.c.gold,
               disp: vg.display, bar: vg.c.metal, barInk: vg.c.deep, sub: "rgba(255,255,255,.7)" },
-            { key: "mkq", mkq: true, title: "MISS KENTUCKY'S QUEEN", line: "Your crown awaits", cta: settings.mkqOpen ? "REGISTER" : "DETAILS",
+            { key: "mkq", mkq: true, title: "MISS KENTUCKY'S QUEEN", line: "A new era of Kentucky pageantry", cta: settings.mkqOpen ? "REGISTER" : "DETAILS",
               bg: "linear-gradient(165deg, #06070A 12%, #101A1E 100%)", ink: "#6EC1D6",
               bar: "linear-gradient(95deg, #0E7C80, #12939A 45%, #6EC1D6)", barInk: "#04161A", sub: "#9FB6BE" },
           ].map((c) => (
@@ -3232,6 +3268,26 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
         </span>
         <span style={{ color: re.c.gold, fontSize: 15 }}>›</span>
       </button>
+
+      {/* find her elsewhere */}
+      {(settings.facebook || settings.instagram) && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 13 }}>
+          {settings.facebook && (
+            <a href={settings.facebook} target="_blank" rel="noreferrer" className="hq-mono hq-press"
+              style={{ flex: 1, padding: "12px 0", borderRadius: 8, textAlign: "center", textDecoration: "none",
+                border: `1px solid ${hub.c.line}`, background: "#FFFFFF", color: hub.c.ink, fontSize: 8.5, letterSpacing: 1.6, fontWeight: 700 }}>
+              FOLLOW ON FACEBOOK
+            </a>
+          )}
+          {settings.instagram && (
+            <a href={settings.instagram} target="_blank" rel="noreferrer" className="hq-mono hq-press"
+              style={{ flex: 1, padding: "12px 0", borderRadius: 8, textAlign: "center", textDecoration: "none",
+                border: `1px solid ${hub.c.line}`, background: "#FFFFFF", color: hub.c.ink, fontSize: 8.5, letterSpacing: 1.6, fontWeight: 700 }}>
+              FOLLOW ON INSTAGRAM
+            </a>
+          )}
+        </div>
+      )}
 
       {/* Announcements from Paige */}
       {liveAlerts.map((a) => {
@@ -3313,7 +3369,7 @@ const panelStyle = (B) => ({
 });
 
 /* ================= SETTINGS (Paige only) ================= */
-function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAlerts, settings = {}, saveSettings, exportAll, importAll, reviews = [], saveReviews, gallery = [], saveGallery, clients = [], requests = [] }) {
+function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAlerts, settings = {}, saveSettings, exportAll, importAll, reviews = [], saveReviews, gallery = [], saveGallery, clients = [], saveClients, requests = [], pageants = [], savePageants }) {
   const { Field, input, Primary, Ghost, chip, card, H } = useBrandBits(B);
   const defFor = (k) => ({ services: BRANDS[k].services.map((s) => ({ ...s })), hours: BRANDS[k].hours.map((h) => [...h]) });
   const [bk, setBk] = useState("pp");
@@ -3328,6 +3384,8 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
   const [pinSaved, setPinSaved] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [siteCopied, setSiteCopied] = useState(false);
+  const [sqBusy, setSqBusy] = useState(false);
+  const [sqMsg, setSqMsg] = useState("");
   const [calCopied, setCalCopied] = useState(false);
   const [pushState, setPushState] = useState("off");
   const [pushMsg, setPushMsg] = useState("");
@@ -3549,11 +3607,11 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
                       const r = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "test" }) });
                       const j = await r.json();
                       setPushMsg(
-                        !j.ok ? String(j.error || "DIDN'T SEND").toUpperCase()
+                        !j.ok ? String(j.error || "SERVER SAID NO — CHECK THE VAPID KEYS IN VERCEL").toUpperCase()
                         : j.sent === 0 ? (j.gone ? "DEVICE EXPIRED — TURN OFF AND BACK ON" : "NO DEVICE REGISTERED — TURN OFF AND BACK ON")
                         : `SENT TO ${j.sent} DEVICE${j.sent === 1 ? "" : "S"}`
                       );
-                    } catch { setPushMsg("DIDN'T SEND"); }
+                    } catch (e) { setPushMsg("/API/PUSH NOT FOUND — THE SERVER FILES ARE NOT UPLOADED YET"); }
                     setTimeout(() => setPushMsg(""), 4500);
                   }}
                   className="hq-mono hq-press"
@@ -3638,6 +3696,19 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
         </a>
       </div>
 
+      {/* Socials */}
+      <SettingHead B={B} note="Shown as buttons on your client home page. Leave blank to hide.">Social Links</SettingHead>
+      <div style={{ ...panelStyle(B) }}>
+        {[["facebook", "Facebook page"], ["instagram", "Instagram"]].map(([k, lab]) => (
+          <div key={k} style={{ marginBottom: 9 }}>
+            <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.5, color: B.c.faint, marginBottom: 4 }}>{lab.toUpperCase()}</div>
+            <input style={{ ...input, fontSize: 12.5 }} placeholder={k === "facebook" ? "https://facebook.com/..." : "https://instagram.com/..."}
+              defaultValue={settings[k] || ""}
+              onBlur={(e) => { saveSettings({ ...settings, [k]: e.target.value.trim() }); toast("Saved"); }} />
+          </div>
+        ))}
+      </div>
+
       {/* Google reviews */}
       <SettingHead B={B} note="Paste each profile’s review link and a Google button appears.">Google Reviews</SettingHead>
       <div style={{ ...panelStyle(B) }}>
@@ -3656,6 +3727,97 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       </>)}
 
       {pane === "clients" && (<>
+      {/* Bring her Square book across */}
+      <SettingHead B={B} note="Her customers from Square, matched on phone so nobody doubles up.">Import From Square</SettingHead>
+      <div style={{ ...panelStyle(B) }}>
+        <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 11px", lineHeight: 1.6 }}>
+          Brings over every customer with a name or a number. Anyone already in your book is left alone — it only adds
+          people you do not have, and fills in a missing phone or email on the ones you do.
+        </p>
+        {sqMsg && (
+          <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.4, color: B.c.accent, marginBottom: 9, lineHeight: 1.8 }}>{sqMsg}</div>
+        )}
+        <button onClick={async () => {
+            if (sqBusy) return;
+            setSqBusy(true); setSqMsg("READING YOUR SQUARE BOOK\u2026");
+            try {
+              const r = await fetch("/api/square?customers=1");
+              const j = await r.json();
+              if (!j.ok) { setSqMsg(String(j.error || "Square said no").toUpperCase()); setSqBusy(false); return; }
+
+              const digits = (p) => String(p || "").replace(/\D/g, "").slice(-10);
+              let next = [...clients];
+              let added = 0, filled = 0, skipped = 0;
+
+              for (const c of j.customers) {
+                const d = digits(c.phone);
+                /* phone is the truth. Fall back to an exact name only when the
+                   person we have has no number, so two different Sarahs never merge. */
+                const nm = String(c.name || "").trim().toLowerCase();
+                const match =
+                  (d && next.find((x) => digits(x.phone) === d)) ||
+                  (nm && next.find((x) => !digits(x.phone) && (x.name || "").trim().toLowerCase() === nm)) ||
+                  null;
+                if (match) {
+                  if ((!match.phone && c.phone) || (!match.email && c.email)) {
+                    next = next.map((x) => x.id !== match.id ? x : { ...x, phone: x.phone || c.phone, email: x.email || c.email });
+                    filled++;
+                  } else skipped++;
+                  continue;
+                }
+                if (!c.name) { skipped++; continue; }
+                next = [{
+                  id: "sq" + Date.now() + Math.floor(Math.random() * 9999),
+                  name: c.name, phone: c.phone || "", email: c.email || "",
+                  biz: { PP: false, VG: false, MKQ: false, DANCE: false, RE: false },
+                  about: c.note || "", shade: "", undertone: "", skinNotes: "", division: "", goals: "",
+                  photo: "", bigDate: "", bigLabel: "", history: [], fromSquare: true,
+                }, ...next];
+                added++;
+              }
+
+              if (added || filled) await saveClients(next);
+              setSqMsg(`${j.count} IN SQUARE \u00b7 ${added} ADDED \u00b7 ${filled} UPDATED \u00b7 ${skipped} ALREADY YOURS`);
+              toast(added ? `${added} clients brought over` : "Nothing new to bring over");
+            } catch {
+              setSqMsg("COULD NOT REACH SQUARE \u2014 CHECK THE SERVER FILES ARE UPLOADED");
+            }
+            setSqBusy(false);
+          }}
+          disabled={sqBusy}
+          className="hq-mono hq-press"
+          style={{ width: "100%", padding: "13px 0", borderRadius: 7, border: "none", cursor: sqBusy ? "default" : "pointer",
+            background: sqBusy ? "#CBC2B4" : B.c.metal, color: B.c.deep, fontSize: 9.5, letterSpacing: 2, fontWeight: 700 }}>
+          {sqBusy ? "WORKING\u2026" : "IMPORT MY SQUARE CLIENTS"}
+        </button>
+        <p className="hq-mono" style={{ fontSize: 7, letterSpacing: 1.2, color: B.c.faint, textAlign: "center", marginTop: 9, lineHeight: 1.8 }}>
+          THEY COME IN UNTAGGED \u2014 TICK PAGEANT OR GLOW AS YOU GO
+        </p>
+      </div>
+
+      {/* Her season */}
+      <SettingHead B={B} note="The pageants she is working this year. They show on the client site and feed Big Days.">Her 2026 Season</SettingHead>
+      <div style={{ ...panelStyle(B) }}>
+        <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 11px", lineHeight: 1.6 }}>
+          Adds the five she named, without dates. Open Calendar &rarr; Pageants to set each date and add her girls.
+        </p>
+        <button onClick={async () => {
+            const season = ["Mrs. America 2026", "Royalty USA 2026", "Miss Kentucky's Queen 2026",
+                            "Teen Miss Kentucky County Fair 2026", "Miss Kentucky Festivals 2026"];
+            const have = new Set((pageants || []).map((p) => String(p.name || "").toLowerCase()));
+            const add = season.filter((n) => !have.has(n.toLowerCase()))
+              .map((n, i) => ({ id: "sea" + Date.now() + i, name: n, date: "", location: "", system: "", girls: [] }));
+            if (!add.length) { toast("All five are already there"); return; }
+            await savePageants([...add, ...(pageants || [])]);
+            toast(`${add.length} added — set their dates in Calendar`);
+          }}
+          className="hq-mono hq-press"
+          style={{ width: "100%", padding: "13px 0", borderRadius: 7, border: "none", cursor: "pointer",
+            background: B.c.metal, color: B.c.deep, fontSize: 9.5, letterSpacing: 2, fontWeight: 700 }}>
+          ADD THE 2026 SEASON
+        </button>
+      </div>
+
       {/* MKQ contestants */}
       {(() => {
         const entries = requests.filter((r) => r.kind === "mkq");
@@ -3825,8 +3987,8 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
           <>
             <SettingHead B={B} note="Two galleries, kept separate — her glows, and her girls&rsquo; crowns.">Gallery</SettingHead>
 
-            {group("glow", "✦", BRANDS.vg.c.accent, "Before & After",
-              "Velvet Glow results. Tag whose they are and they show on that client's own page too.",
+            {group("glow", "✦", BRANDS.vg.c.accent, "Glow Results",
+              "Velvet Glow afters. Tag whose they are and they show on that client's own page too.",
               <GlowUploader B={B} onAdd={addGlow} clients={clients} />)}
 
             {group("win", "♛", BRANDS.pp.c.accent, "Wall of Fame",
@@ -4052,7 +4214,7 @@ function GlowUploader({ B, onAdd, clients = [] }) {
   const [who, setWho] = useState("");
   const [pub, setPub] = useState(true);
   const [busy, setBusy] = useState(false);
-  const ready = before && after && !busy;
+  const ready = after && !busy;
   const go = async () => {
     setBusy(true);
     try { await onAdd(before, after, caption.trim(), shade.trim(), who, pub); setBefore(null); setAfter(null); setCaption(""); setShade(""); setWho(""); setPub(true); }
@@ -4070,10 +4232,10 @@ function GlowUploader({ B, onAdd, clients = [] }) {
   );
   return (
     <>
-      <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 2.5, color: BRANDS.vg.c.accent, marginBottom: 9, fontWeight: 600 }}>✦ ADD A BEFORE & AFTER</div>
+      <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 2.5, color: BRANDS.vg.c.accent, marginBottom: 9, fontWeight: 600 }}>✦ ADD A GLOW</div>
       <div style={{ display: "flex", gap: 8, marginBottom: 9 }}>
-        {slot("BEFORE", before, setBefore)}
-        {slot("AFTER", after, setAfter)}
+        {slot("THE GLOW", after, setAfter)}
+        {slot("BEFORE, IF YOU HAVE IT", before, setBefore)}
       </div>
       <input style={{ ...input, marginBottom: 8 }} placeholder="Caption — e.g., bridal glow, two coats" value={caption} onChange={(e) => setCaption(e.target.value)} />
       <input style={{ ...input, marginBottom: 8 }} placeholder="Shade used (optional)" value={shade} onChange={(e) => setShade(e.target.value)} />
@@ -4233,7 +4395,7 @@ function GalleryPage({ B, lock }) {
   return (
     <div className="hq-fade">
       {!lock && <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
-        {[["glows", "✦ BEFORE & AFTER"], ["wins", "♛ WALL OF FAME"]].map(([v, lab]) => {
+        {[["glows", "✦ GLOW RESULTS"], ["wins", "♛ WALL OF FAME"]].map(([v, lab]) => {
           const on = view === v;
           const b2 = v === "glows" ? BRANDS.vg : BRANDS.pp;
           return (
@@ -4248,7 +4410,7 @@ function GalleryPage({ B, lock }) {
 
       {lock && (
         <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 2.5, color: br.c.accent, fontWeight: 700, marginBottom: 12 }}>
-          {view === "glows" ? "✦ BEFORE & AFTER" : "♛ WALL OF FAME"}
+          {view === "glows" ? "✦ GLOW RESULTS" : "♛ WALL OF FAME"}
         </div>
       )}
 
@@ -4264,7 +4426,7 @@ function GalleryPage({ B, lock }) {
       {view === "glows" && glows.map((g) => (
         <div key={g.id} style={{ ...card, padding: 10, marginBottom: 12, overflow: "hidden" }}>
           <div style={{ display: "flex", gap: 6 }}>
-            {[["before", "BEFORE"], ["after", "AFTER"]].map(([k, lab]) => (
+            {(g.beforeId ? [["before", "BEFORE"], ["after", "AFTER"]] : [["after", ""]]).map(([k, lab]) => (
               <div key={k} style={{ flex: 1, position: "relative", borderRadius: 6, overflow: "hidden", background: B.c.soft }}>
                 {pic(g[k + "Id"])
                   ? <img src={pic(g[k + "Id"])} alt={lab} loading="lazy" decoding="async" style={{ width: "100%", height: 210, objectFit: "cover", display: "block" }} />
@@ -4327,10 +4489,11 @@ const MKQ = {
   city: "Leitchfield, Kentucky",
   tagline: "A new era of Kentucky pageantry",
   values: ["Beauty", "Confidence", "Communication", "Character", "Community"],
+  facebook: "https://www.facebook.com/share/1J2a6gWrRh/",
   addOn: { name: "Overall Photogenic", price: 10, unit: "per photo" },
   /* Registration runs on Bombyhead. Paige pastes her pageant's link in
      Settings → CLIENTS; until then this is where people land.          */
-  registerUrl: "https://bombyhead.com",
+  registerUrl: "https://bombyhead.com/contest.php?contestid=c5224",
   sessions: [
     {
       id: "one", name: "Session One", fee: 100, blurb: "Baby · Toddler · Tiny",
@@ -4417,14 +4580,16 @@ function MkqPublic({ B, settings = {} }) {
             <span className="hq-mono hq-live" style={{ fontSize: 10, padding: "6px 15px 6px 11px" }}>REGISTRATION NOW OPEN</span>
           </div>
         )}
-        <div style={{ fontFamily: B.display, fontSize: 15, fontStyle: "italic", color: TEAL, marginTop: 13 }}>{MKQ.tagline}</div>
+        <div style={{ fontFamily: B.display, fontSize: 17, fontStyle: "italic", color: TEAL, marginTop: 14, lineHeight: 1.4 }}>
+          The New Era of Kentucky Pageantry
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 300, color: "#DCE9ED", marginTop: 9, lineHeight: 1.65, padding: "0 6px" }}>
+          Where Beauty, Confidence, Communication, Character, and Community Come Together.
+        </div>
         <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 2, color: "#FFFFFF", marginTop: 11, lineHeight: 1.9 }}>
           OCTOBER 3, 2026<br />
           <span style={{ color: TEAL }}>{MKQ.venue.toUpperCase()}</span><br />
           <span style={{ color: TEAL }}>{MKQ.city.toUpperCase()}</span>
-        </div>
-        <div className="hq-mono" style={{ fontSize: 7, letterSpacing: 1.6, color: "#9FB6BE", marginTop: 12, lineHeight: 2 }}>
-          {MKQ.values.map((v) => v.toUpperCase()).join(" · ")}
         </div>
         <div className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.6, color: "#7FA9B4", marginTop: 10 }}>
           DIRECTED BY PAIGE HENDERSON &amp; CHANDRA HORNBACK
@@ -4435,6 +4600,14 @@ function MkqPublic({ B, settings = {} }) {
           </div>
         )}
       </div>
+
+      {(settings.mkqFacebook || MKQ.facebook) && (
+        <a href={settings.mkqFacebook || MKQ.facebook} target="_blank" rel="noreferrer" className="hq-mono hq-press"
+          style={{ display: "block", padding: "13px 0", marginBottom: 12, borderRadius: 9, textAlign: "center", textDecoration: "none",
+            border: `1px solid ${TEAL}`, color: TEAL, fontSize: 9.5, letterSpacing: 1.8, fontWeight: 700 }}>
+          FOLLOW MISS KENTUCKY&rsquo;S QUEEN ON FACEBOOK
+        </a>
+      )}
 
       {/* sessions, ages and how they're judged */}
       <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: B.c.faint, margin: "0 0 9px" }}>DIVISIONS &amp; ENTRY FEES</div>
@@ -4536,1062 +4709,22 @@ function MkqPublic({ B, settings = {} }) {
               TEXT PAIGE ABOUT THE PAGEANT
             </a>
           </>
-        ) : sent ? (
-          <div style={{ textAlign: "center", padding: "10px 0" }}>
-            <div style={{ fontSize: 24, color: TEAL }}>♛</div>
-            <div style={{ fontFamily: B.display, fontSize: 19, fontWeight: 600, color: "#FFFFFF", marginTop: 8 }}>You're on the list</div>
-            <p style={{ fontSize: 13, fontWeight: 300, color: "#9FB6BE", lineHeight: 1.7, margin: "7px 0 0" }}>
-              You'll hear from Paige the moment registration opens.
-            </p>
-          </div>
         ) : (
           <>
-            <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: TEAL, marginBottom: 4 }}>GET ON THE LIST EARLY</div>
-            <p style={{ fontSize: 12.5, fontWeight: 300, color: "#9FB6BE", lineHeight: 1.6, margin: "0 0 13px" }}>
-              Registration opens on Bombyhead soon. Leave your details and you'll hear first.
+            <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: TEAL, marginBottom: 5, textAlign: "center" }}>
+              REGISTRATION OPENS SOON
+            </div>
+            <p style={{ fontSize: 13, fontWeight: 300, color: "#9FB6BE", lineHeight: 1.7, margin: "0 0 15px", textAlign: "center" }}>
+              Entries will be handled on Bombyhead. Text Paige and she will make sure you hear the moment it opens.
             </p>
-            <div style={{ marginBottom: 9 }}>
-              <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.5, color: "#7FA9B4", marginBottom: 4 }}>DIVISION YOU'RE EYEING</div>
-              <select value={form.division} onChange={(e) => setForm({ ...form, division: e.target.value })}
-                style={{ width: "100%", padding: "12px 13px", fontSize: 15, border: "1px solid rgba(255,255,255,.22)", borderRadius: 6,
-                  background: "rgba(255,255,255,.06)", color: "#EAF6F8", boxSizing: "border-box" }}>
-                <option value="">Not sure yet</option>
-                {MKQ.sessions.map((s2) => (
-                  <optgroup key={s2.id} label={`${s2.name} — $${s2.fee}`}>
-                    {s2.divisions.map((d) => <option key={d.id} value={d.id}>{d.name} · {d.age}</option>)}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
-            {field("name", "Contestant's name")}
-            {field("parent", "Parent or guardian")}
-            {field("phone", "Phone", "tel")}
-            {field("email", "Email", "email")}
-            <button onClick={submit} disabled={!form.name.trim() || !form.phone.trim() || busy} className="hq-press"
-              style={{ width: "100%", marginTop: 4, padding: 15, borderRadius: 7, border: "none", cursor: "pointer",
-                background: form.name.trim() && form.phone.trim() && !busy ? `linear-gradient(95deg, ${DEEP}, #12939A 45%, ${TEAL})` : "rgba(255,255,255,.16)",
-                color: form.name.trim() && form.phone.trim() && !busy ? INK : "rgba(255,255,255,.55)", fontSize: 11, letterSpacing: 2.5, fontWeight: 700 }}>
-              {busy ? "SENDING…" : "KEEP ME POSTED"}
-            </button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-
-}
-
-/* ================= REALTY STUDIO ================= */
-function RealtyStudio({ B, leads, saveLeads }) {
-  const { Field, input, Primary, Ghost, card, H } = useBrandBits(B);
-
-  /* mortgage calculator */
-  const [calc, setCalc] = useState({ price: "325000", down: "10000", rate: "6.5", years: "30", taxes: "3200", ins: "1400" });
-  const num = (v) => parseFloat(v) || 0;
-  const loan = Math.max(0, num(calc.price) - num(calc.down));
-  const r = num(calc.rate) / 100 / 12;
-  const n = num(calc.years) * 12;
-  const pi = r > 0 && n > 0 ? (loan * r) / (1 - Math.pow(1 + r, -n)) : n > 0 ? loan / n : 0;
-  const monthly = pi + num(calc.taxes) / 12 + num(calc.ins) / 12;
-
-  /* valuation requests */
-  const blank = { name: "", address: "", contact: "", timeframe: "Just curious", notes: "" };
-  const [form, setForm] = useState(blank);
-  const [sent, setSent] = useState(false);
-  const submitLead = async () => {
-    if (!form.name.trim() || !form.address.trim()) return;
-    await saveLeads([{ ...form, id: "ld" + Date.now(), date: new Date().toISOString().slice(0, 10) }, ...leads]);
-    setForm(blank); setSent(true); setTimeout(() => setSent(false), 2500);
-  };
-
-  const calcField = (label, key, prefix) => (
-    <div style={{ flex: 1, minWidth: 110 }}>
-      <Field label={label}>
-        <input className="hq-mono" style={input} type="number" value={calc[key]} onChange={(e) => setCalc({ ...calc, [key]: e.target.value })} placeholder={prefix} />
-      </Field>
-    </div>
-  );
-
-  return (
-    <div className="hq-fade">
-      {/* Group badge */}
-      <div style={{ textAlign: "center", marginBottom: 12 }}>
-        <img src={HW_LOGO} alt="Henderson — Reputation · Service · Results"
-          style={{ width: 132, height: 132, borderRadius: "50%", objectFit: "cover", boxShadow: "0 4px 16px rgba(20,15,10,.28)" }} />
-      </div>
-
-      {/* The duo */}
-      <p style={{ textAlign: "center", fontSize: 13.5, fontWeight: 300, color: B.c.faint, margin: "0 0 14px", lineHeight: 1.6 }}>
-        One team for the whole move — Paige finds the house, Blake finances it.
-      </p>
-
-      {/* $500 perk banner */}
-      <div style={{ borderRadius: 10, marginBottom: 14, padding: "15px 16px", textAlign: "center", background: `linear-gradient(160deg, ${B.c.deep} 20%, ${B.c.deep2} 100%)`, boxShadow: "0 3px 12px rgba(35,46,107,.25)" }}>
-        <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: B.c.soft, opacity: 0.9 }}>CLIENT PERK</div>
-        <div style={{ fontFamily: B.display, fontSize: 21, fontWeight: 600, color: "#FFFFFF", margin: "4px 0 3px" }}>$500 off closing costs</div>
-        <div style={{ fontSize: 12.5, fontWeight: 300, color: B.c.soft }}>
-          For all Pageant Perfect &amp; Velvet Glow clients
-        </div>
-        <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.5, color: B.c.soft, opacity: 0.75, marginTop: 6 }}>MINIMUM 3 MONTHS OF COACHING OR TANS TO QUALIFY</div>
-      </div>
-
-      {/* Paige — the REALTOR® */}
-      <div style={{ ...card, padding: "18px 18px 16px", marginBottom: 12, textAlign: "center" }}>
-        <div style={{ display: "grid", placeItems: "center", marginBottom: 10 }}><Monogram B={B} text="P" size={54} /></div>
-        <div style={{ fontFamily: B.display, fontSize: 22, fontWeight: 600, letterSpacing: 1 }}>Paige Swope</div>
-        <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 2.5, color: B.c.accent, margin: "4px 0 10px" }}>REALTOR® · ERA SELECT REAL ESTATE · LEXINGTON, KY</div>
-        <p style={{ fontSize: 13.5, fontWeight: 300, lineHeight: 1.6, margin: "0 0 12px" }}>
-          Finds it, lists it, negotiates it — Central Kentucky real estate with a personal touch.
-        </p>
-        <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-          <a href={`sms:+1${B.phone}`} style={{ padding: "10px 18px", borderRadius: 4, background: B.c.metal, color: "#FFFFFF", fontWeight: 600, fontSize: 10.5, letterSpacing: 2, textTransform: "uppercase", textDecoration: "none" }}>Text Paige</a>
-          <a href={`mailto:${B.email}`} style={{ padding: "10px 18px", borderRadius: 4, border: `1px solid ${B.c.accent}`, color: B.c.accent, fontWeight: 500, fontSize: 10.5, letterSpacing: 2, textTransform: "uppercase", textDecoration: "none" }}>Email</a>
-          <a href={B.eraUrl} target="_blank" rel="noreferrer" style={{ padding: "10px 18px", borderRadius: 4, border: `1px solid ${B.c.accent}`, color: B.c.accent, fontWeight: 500, fontSize: 10.5, letterSpacing: 2, textTransform: "uppercase", textDecoration: "none" }}>ERA Profile</a>
-        </div>
-      </div>
-
-      {/* Blake — the financing */}
-      <div style={{ ...card, padding: "18px 18px 16px", marginBottom: 14, textAlign: "center", borderTop: `2px solid ${B.c.deep}` }}>
-        <div style={{ display: "grid", placeItems: "center", marginBottom: 10 }}><Monogram B={B} text="B" size={54} fill={B.c.deep} /></div>
-        <div style={{ fontFamily: B.display, fontSize: 22, fontWeight: 600, letterSpacing: 1 }}>Blake Henderson</div>
-        <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 2.5, color: B.c.deep, margin: "4px 0 10px" }}>HOME FINANCING · THE HENDERSON TEAM · NEW AMERICAN FUNDING</div>
-        <p style={{ fontSize: 13.5, fontWeight: 300, lineHeight: 1.6, margin: "0 0 12px" }}>
-          Pre-approvals, rates, and closing — the lending half of the house.
-        </p>
-        <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-          <a href={`sms:+1${B.blakePhone}`} style={{ padding: "10px 18px", borderRadius: 4, background: B.c.deep, color: B.c.gold, fontWeight: 600, fontSize: 10.5, letterSpacing: 2, textTransform: "uppercase", textDecoration: "none" }}>Text Blake</a>
-          <a href={`mailto:${B.blakeEmail}`} style={{ padding: "10px 18px", borderRadius: 4, border: `1px solid ${B.c.deep}`, color: B.c.deep, fontWeight: 500, fontSize: 10.5, letterSpacing: 2, textTransform: "uppercase", textDecoration: "none" }}>Email</a>
-          <a href={B.financeUrl} target="_blank" rel="noreferrer" style={{ padding: "10px 18px", borderRadius: 4, border: `1px solid ${B.c.deep}`, color: B.c.deep, fontWeight: 500, fontSize: 10.5, letterSpacing: 2, textTransform: "uppercase", textDecoration: "none" }}>HendersonHomeLoans.net</a>
-        </div>
-        <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.5, color: B.c.faint, marginTop: 10 }}>{B.nmls}</div>
-      </div>
-
-      {/* Mortgage calculator */}
-      <div style={{ ...card, padding: 18, marginBottom: 14 }}>
-        <H size={19}>Mortgage calculator</H>
-        <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "4px 0 14px" }}>Estimate a monthly payment — principal &amp; interest plus taxes and insurance.</p>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {calcField("Home price $", "price")}
-          {calcField("Down payment $", "down")}
-        </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {calcField("Rate %", "rate")}
-          {calcField("Term (years)", "years")}
-        </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {calcField("Taxes $/yr", "taxes")}
-          {calcField("Insurance $/yr", "ins")}
-        </div>
-        <div style={{ background: B.c.bg, border: `1px solid ${B.c.line}`, borderRadius: 6, padding: "13px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-          <div>
-            <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 2, color: B.c.faint }}>ESTIMATED MONTHLY</div>
-            <div className="hq-mono" style={{ fontSize: 22, fontWeight: 500, color: B.c.deep }}>{money(monthly)}</div>
-          </div>
-          <div className="hq-mono" style={{ fontSize: 9.5, letterSpacing: 1, color: B.c.faint, textAlign: "right", lineHeight: 1.8 }}>
-            P&amp;I {money(pi)}<br />LOAN {money(loan)}
-          </div>
-        </div>
-        <p style={{ fontSize: 10.5, fontWeight: 300, color: B.c.faint, margin: "10px 0 0" }}>Estimate only — excludes PMI and HOA. Get exact numbers from your lender.</p>
-      </div>
-
-      {/* Home valuation */}
-      <div style={{ ...card, padding: 18, marginBottom: 14 }}>
-        <H size={19}>What's my home worth?</H>
-        <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "4px 0 14px" }}>Request a free, no-pressure valuation — Paige will reach out personally.</p>
-        <Field label="Name"><input style={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-        <Field label="Property address"><input style={input} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></Field>
-        <Field label="Phone or email"><input style={input} value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} /></Field>
-        <Field label="Timeframe">
-          <select style={input} value={form.timeframe} onChange={(e) => setForm({ ...form, timeframe: e.target.value })}>
-            {["Just curious", "Thinking about it", "Ready in 0–3 months", "Ready in 3–6 months"].map((t) => <option key={t}>{t}</option>)}
-          </select>
-        </Field>
-        <Primary onClick={submitLead} disabled={!form.name.trim() || !form.address.trim()}>{sent ? "Request received ✓" : "Request my valuation"}</Primary>
-      </div>
-
-
-    </div>
-  );
-}
-
-/* ================= STUDIO (PP / VG) ================= */
-/* ================= BRAND HOME (one page per business) =================
-   Sections are driven by this list, so adding a third business later
-   (a boutique, say) is a BRANDS entry plus a row or two here.        */
-function StudioTab({ B, services, hours, reviews = [], saveReviews, gallery = [], pageants = [], settings = {}, googleUrl }) {
-  const { card, H } = useBrandBits(B);
-  const [section, setSection] = useState(null);
-  const cd = useMkqCountdown();
-  const svcList = services && services.length ? services : B.services;
-  const hrList = hours && hours.length ? hours : B.hours;
-  const isVG = B.key === "vg";
-  const code = isVG ? "VG" : "PP";
-
-  const mine = reviews.filter((r) => r.brand === code && r.approved !== false);
-  const avg = mine.length ? Math.round((mine.reduce((a, r) => a + (r.rating || 5), 0) / mine.length) * 10) / 10 : 0;
-  const shots = gallery.filter((g) => (isVG ? g.kind === "glow" : g.kind === "win")).length;
-  const today = new Date().toISOString().slice(0, 10);
-  const upcoming = pageants.filter((p) => p.date && p.date >= today).sort((a, b) => a.date.localeCompare(b.date));
-  const openToday = (() => {
-    const name = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][new Date().getDay()];
-    const row = hrList.find(([d]) => d === name);
-    return row ? row[1] : "";
-  })();
-
-  const prices = svcList.map((s2) => parseFloat(String(s2.price).replace(/[^0-9.]/g, ""))).filter((n) => n > 0);
-  const from = prices.length ? `From $${Math.min(...prices)}` : "";
-
-  const rows = [
-    { key: "book", label: isVG ? "Book a Glow" : "Book a Lesson", sub: from ? `${from} · services & times on the next screen` : "Straight into Paige's calendar", href: B.bookBase, primary: true, emblem: B.mark },
-    isVG
-      ? { key: "care", label: "Before & After Care", sub: "How to prep and make it last", emblem: "✦" }
-      : { key: "mkq", label: "Miss Kentucky's Queen",
-          sub: settings.mkqOpen ? "Registration is open · October 3" : (cd.diff > 0 ? `${cd.d} days away · October 3` : "Crowning day"),
-          art: MKQ_LOGO, live: !!settings.mkqOpen },
-    ...(isVG ? [] : [{ key: "pageants", label: "Upcoming Pageants", sub: upcoming.length ? `${upcoming.length} on the calendar` : "Season calendar", emblem: "♛" }]),
-    { key: "gallery", label: isVG ? "Gallery" : "Gallery & Wall of Fame", sub: shots ? `${shots} to see` : "Her work", emblem: "◫" },
-    { key: "hours", label: "Hours", sub: openToday && !/closed/i.test(openToday) ? `Open today ${openToday}` : "Closed today", emblem: "◷" },
-    { key: "reviews", label: "Reviews", sub: mine.length ? `★ ${avg} from ${mine.length}` : "Be the first", emblem: "★" },
-    ...(isVG ? [] : [{ key: "care", label: "Lesson Prep", sub: "What to bring, what to practice", emblem: "✧" }]),
-  ];
-
-  /* ---- the menu ---- */
-  if (!section) {
-    const book = rows.find((r) => r.primary);
-    const extras = rows.filter((r) => !r.primary);
-    return (
-      <div className="hq-fade" style={{ position: "relative" }}>
-        {/* faded mark behind the page */}
-        <div aria-hidden="true" style={{
-          position: "absolute", left: "50%", top: 250, transform: "translate(-50%,-50%)",
-          fontSize: 300, lineHeight: 1, color: B.c.accent, opacity: 0.045, pointerEvents: "none",
-          fontFamily: B.display, userSelect: "none", zIndex: 0,
-        }}>{B.mark}</div>
-
-        {/* THE thing people came for */}
-        <a href={book.href} target="_blank" rel="noreferrer" className="hq-press"
-          style={{
-            position: "relative", zIndex: 1, display: "block", textAlign: "center", textDecoration: "none",
-            padding: "30px 20px 26px", borderRadius: 14, marginBottom: 22,
-            background: `linear-gradient(160deg, ${B.c.deep} 15%, ${B.c.deep2} 100%)`,
-            boxShadow: "0 8px 28px rgba(20,15,10,.28)",
-          }}>
-          <div style={{ fontSize: 26, color: B.c.gold, lineHeight: 1 }}>{B.mark}</div>
-          <div style={{ fontFamily: B.display, fontSize: 30, fontWeight: 600, letterSpacing: 1, color: "#FBF8F3", lineHeight: 1.1, marginTop: 10 }}>
-            {isVG ? "Book a Glow" : "Book a Lesson"}
-          </div>
-          <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 2, color: B.c.gold, opacity: 0.75, marginTop: 8 }}>
-            {from ? from.toUpperCase() : "OPEN TIMES ON THE NEXT SCREEN"}
-            {openToday && !/closed/i.test(openToday) ? ` · OPEN TODAY ${openToday.toUpperCase()}` : ""}
-          </div>
-          <div className="hq-mono" style={{
-            display: "inline-block", marginTop: 18, padding: "14px 40px", borderRadius: 999,
-            background: B.c.metal, color: B.c.deep, fontSize: 11, letterSpacing: 3, fontWeight: 700,
-          }}>
-            RESERVE →
-          </div>
-        </a>
-
-        {/* everything else, quieter */}
-        <div className="hq-mono" style={{ position: "relative", zIndex: 1, fontSize: 7.5, letterSpacing: 3, color: B.c.faint, textAlign: "center", marginBottom: 11 }}>
-          MORE FROM {B.name}
-        </div>
-        <div className="hq-stagger" style={{ position: "relative", zIndex: 1, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 9 }}>
-          {extras.map((r) => (
-            <button key={r.key + r.label} onClick={() => setSection(r.key)} className="hq-press"
-              style={{
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 7,
-                padding: "16px 10px", borderRadius: 10, cursor: "pointer", textAlign: "center",
-                background: "#FFFFFF", border: `1px solid ${B.c.line}`, boxShadow: "0 1px 5px rgba(20,15,10,.05)",
-                gridColumn: r.art ? "span 2" : "auto",
-              }}>
-              {r.art
-                ? <span style={{ width: 46, height: 40, borderRadius: 7, overflow: "hidden", background: "#06070A", display: "grid", placeItems: "center", boxShadow: "0 2px 8px rgba(0,0,0,.26)" }}>
-                    <img src={r.art} alt="" style={{ width: "94%", display: "block" }} />
-                  </span>
-                : <span style={{ width: 34, height: 34, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 14, background: B.c.soft, color: B.c.accent }}>{r.emblem || B.mark}</span>}
-              <span style={{ fontFamily: B.display, fontSize: 15.5, fontWeight: 600, color: B.c.ink, lineHeight: 1.2 }}>{r.label}</span>
-              {r.live && <span className="hq-mono hq-live" style={{ fontSize: 7 }}>REGISTRATION LIVE</span>}
-              <span className="hq-mono" style={{ fontSize: 7, letterSpacing: 1.2, color: B.c.faint, lineHeight: 1.5 }}>{r.sub.toUpperCase()}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  /* ---- a section ---- */
-  const back = (
-    <button onClick={() => setSection(null)} className="hq-mono hq-press"
-      style={{ border: "none", background: "none", color: B.c.accent, fontSize: 8.5, letterSpacing: 2, fontWeight: 700, padding: "0 0 14px", cursor: "pointer" }}>
-      ‹ {B.name}
-    </button>
-  );
-
-  return (
-    <div className="hq-fade">
-      {back}
-
-      {section === "hours" && (
-        <div style={{ ...card, padding: "16px 20px" }}>
-          {hrList.map(([d, h]) => {
-            const isToday = d === ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][new Date().getDay()];
-            return (
-              <div key={d} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", fontSize: 14, borderBottom: `1px solid ${B.c.line}` }}>
-                <span style={{ fontWeight: isToday ? 700 : 500, color: isToday ? B.c.accent : B.c.ink }}>{d}{isToday ? " · today" : ""}</span>
-                <span className="hq-mono" style={{ color: /closed/i.test(h) ? B.c.faint : B.c.ink, fontSize: 12 }}>{h}</span>
-              </div>
-            );
-          })}
-          <a href={B.bookBase} target="_blank" rel="noreferrer" className="hq-mono hq-press"
-            style={{ display: "block", marginTop: 16, padding: "14px 0", borderRadius: 6, textAlign: "center", background: B.c.metal, color: B.c.deep, fontSize: 10, letterSpacing: 2.5, fontWeight: 700, textDecoration: "none" }}>
-            SEE OPEN TIMES →
-          </a>
-        </div>
-      )}
-
-      {section === "pageants" && (
-        <>
-          {upcoming.length === 0 && (
-            <Empty B={B} mark="♛" title="Next season's dates are coming"
-              body="Ask Paige at your next lesson what she's got her eye on." />
-          )}
-          {upcoming.map((p) => {
-            const out = Math.ceil((new Date(p.date + "T12:00") - new Date()) / 86400000);
-            return (
-              <div key={p.id} style={{ ...card, padding: "14px 16px", marginBottom: 9, borderLeft: `3px solid ${B.c.accent}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
-                  <div style={{ fontFamily: B.display, fontSize: 17, fontWeight: 600, lineHeight: 1.2 }}>♛ {p.name}</div>
-                  <span className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 1.5, color: B.c.accent, whiteSpace: "nowrap", fontWeight: 600 }}>
-                    {out === 0 ? "TODAY" : `IN ${out} DAYS`}
-                  </span>
-                </div>
-                <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 1.5, color: B.c.faint, marginTop: 5 }}>
-                  {new Date(p.date + "T12:00").toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric" }).toUpperCase()}
-                  {p.location ? ` · ${p.location.toUpperCase()}` : ""}
-                </div>
-                {p.system && <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.5, color: B.c.faint, marginTop: 3, opacity: 0.8 }}>{p.system.toUpperCase()}</div>}
-              </div>
-            );
-          })}
-        </>
-      )}
-
-      {section === "mkq" && <MkqPublic B={BRANDS.mkq} settings={settings} />}
-      {section === "gallery" && <GalleryPage B={B} lock={B.key} />}
-      {section === "reviews" && <ReviewsPage B={B} reviews={reviews} saveReviews={saveReviews} lock={code} googleUrl={googleUrl} />}
-      {section === "care" && <CarePage B={B} lock={B.key} />}
-    </div>
-  );
-}
-
-/* ================= CALENDAR (month grid + agenda + pageants + directing) ================= */
-function CalendarTab({ B, events, saveEvents, pageants, savePageants, clients, directing, saveDirecting, busyBlocks = [], initialView = "month" }) {
-  const { Field, input, Primary, Ghost, chip, card } = useBrandBits(B);
-  const [view, setView] = useState(initialView);
-  const [adding, setAdding] = useState(false);
-  const blank = { type: "lesson", title: "", clientName: "", date: "", time: "", durMin: 60, notes: "" };
-  const [form, setForm] = useState(blank);
-  const today = new Date().toISOString().slice(0, 10);
-  const [cursor, setCursor] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
-  const [selDay, setSelDay] = useState(today);
-
-  /* all items, past and future */
-  const allItems = [
-    ...events.map((e) => ({ ...e, kind: "event" })),
-    ...pageants.filter((p) => p.date).map((p) => ({
-      id: p.id, kind: "pageant", type: "pageant", title: p.name, date: p.date, time: "",
-      notes: [p.system && `System: ${p.system}`, p.director && `Director: ${p.director}`, `${(p.girls || []).length} girls competing`].filter(Boolean).join(" · "),
-      location: p.location || "",
-    })),
-    ...directing.filter((d) => d.date).map((d) => ({
-      id: d.id, kind: "directing", type: "pageant", title: `${d.name} (directing)`, date: d.date, time: "", notes: d.notes || "", location: d.location || "",
-    })),
-  ];
-  const sortItems = (a, b) => a.date.localeCompare(b.date) || (EVENT_TYPES[a.type]?.rank ?? 9) - (EVENT_TYPES[b.type]?.rank ?? 9) || (a.time || "99").localeCompare(b.time || "99");
-  const agenda = allItems.filter((e) => e.date >= today).sort(sortItems);
-  const byDate = {};
-  allItems.forEach((e) => { (byDate[e.date] = byDate[e.date] || []).push(e); });
-  Object.values(byDate).forEach((l) => l.sort(sortItems));
-
-  const prettyDay = (d) => {
-    const dt = new Date(d + "T12:00");
-    const label = dt.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-    return d === today ? `Today · ${label}` : label;
-  };
-
-  const addEvent = async () => {
-    if (!form.title.trim() || !form.date) return;
-    await saveEvents([...events, { ...form, id: "e" + Date.now(), durMin: Number(form.durMin) || 60 }]);
-    setForm(blank); setAdding(false);
-  };
-  const toIphone = (e) => downloadICS(`${e.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.ics`,
-    [{ title: `${e.title}${e.clientName ? ` — ${e.clientName}` : ""}`, date: e.date, time: e.time || "", durMin: e.durMin, notes: e.notes, location: e.location }]);
-  const exportAll = () => agenda.length && downloadICS("paige-hq-schedule.ics",
-    agenda.map((e) => ({ title: `${e.title}${e.clientName ? ` — ${e.clientName}` : ""}`, date: e.date, time: e.time || "", durMin: e.durMin, notes: e.notes, location: e.location })));
-
-  const ItemCard = (e) => (
-    <div key={e.kind + e.id} style={{ ...card, padding: "13px 15px", marginBottom: 8, borderLeft: `2px solid ${isBizType(e.type) ? B.c.accent : e.type === "pageant" ? B.c.gold : B.c.line}` }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-        <div style={{ fontWeight: 500, fontSize: 14.5 }}>
-          <span style={{ color: B.c.accent, marginRight: 6 }}>{EVENT_TYPES[e.type]?.mark}</span>
-          {e.title}{e.clientName ? <span style={{ fontWeight: 300, color: B.c.faint }}> · {e.clientName}</span> : null}
-        </div>
-        <div className="hq-mono" style={{ fontSize: 10, letterSpacing: 1, color: B.c.faint, whiteSpace: "nowrap" }}>{prettyTime(e.time)}</div>
-      </div>
-      {e.notes && <div style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, marginTop: 3 }}>{e.notes}</div>}
-      <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
-        <button onClick={() => toIphone(e)} className="hq-mono" style={{ border: "none", background: "none", color: B.c.accent, fontSize: 9.5, letterSpacing: 2, padding: 0, fontWeight: 500 }}>ADD TO IPHONE</button>
-        {e.kind === "event" && (
-          <button onClick={() => saveEvents(events.filter((x) => x.id !== e.id))} className="hq-mono" style={{ border: "none", background: "none", color: B.c.faint, fontSize: 9.5, letterSpacing: 2, padding: 0 }}>REMOVE</button>
-        )}
-      </div>
-    </div>
-  );
-
-  /* month grid */
-  const y = cursor.getFullYear(), m = cursor.getMonth();
-  const firstDow = new Date(y, m, 1).getDay();
-  const daysInMonth = new Date(y, m + 1, 0).getDate();
-  const cells = [...Array(firstDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => `${y}-${pad(m + 1)}-${pad(i + 1)}`)];
-  const monthLabel = cursor.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-  const dotColor = (t) => (isBizType(t) ? B.c.accent : t === "pageant" ? B.c.gold : "#B9B2A4");
-
-  const AddForm = () => (
-    <div className="hq-fade" style={{ ...card, padding: 18, marginBottom: 16 }}>
-      <Field label="Type">
-        <select style={input} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-          {Object.entries(EVENT_TYPES).filter(([k]) => k !== "pageant").map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
-      </Field>
-      <Field label="Title"><input style={input} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={form.type === "tan" ? "Signature glow" : form.type === "lesson" ? "One-hour coaching" : form.type === "dance" ? "Dance lesson" : form.type === "showing" ? "Showing · address" : form.type === "emcee" ? "Emceeing · Bluegrass State Classic" : "Event name"} /></Field>
-      {(form.type === "lesson" || form.type === "tan" || form.type === "dance" || form.type === "client" || form.type === "showing") && (
-        <Field label="Client">
-          <input style={input} list="hq-clients" value={form.clientName} onChange={(e) => setForm({ ...form, clientName: e.target.value })} placeholder="Who is it for?" />
-          <datalist id="hq-clients">{clients.map((c) => <option key={c.id} value={c.name} />)}</datalist>
-        </Field>
-      )}
-      <div style={{ display: "flex", gap: 10 }}>
-        <div style={{ flex: 1.2 }}><Field label="Date"><input style={input} type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field></div>
-        <div style={{ flex: 1 }}><Field label="Time"><input style={input} type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} /></Field></div>
-        <div style={{ flex: 0.7 }}><Field label="Mins"><input style={input} type="number" value={form.durMin} onChange={(e) => setForm({ ...form, durMin: e.target.value })} /></Field></div>
-      </div>
-      <Field label="Notes"><input style={input} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Optional" /></Field>
-      <Primary onClick={addEvent} disabled={!form.title.trim() || !form.date}>Save</Primary>
-    </div>
-  );
-
-  return (
-    <div className="hq-fade">
-      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-        {[["month", "MONTH"], ["lesson", "LESSONS"], ["tan", "TANNING"], ["dance", "DANCE"], ["pageants", "PAGEANTS"]].map(([v, lab]) => (
-          <button key={v} className="hq-mono" style={{ ...chip(view === v), flex: 1, textAlign: "center", padding: "7px 4px", fontSize: 8.5 }} onClick={() => setView(v)}>{lab}</button>
-        ))}
-      </div>
-
-      {view === "month" && busyBlocks.length > 0 && (
-        <div className="hq-mono" style={{ fontSize: 7, letterSpacing: 1.5, color: B.c.faint, textAlign: "center", marginBottom: 8, opacity: 0.8 }}>
-          {busyBlocks.length} BLOCKED-OFF TIME{busyBlocks.length === 1 ? "" : "S"} FROM YOUR OWN CALENDAR
-        </div>
-      )}
-
-      {view !== "pageants" && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <Primary onClick={() => { setAdding(!adding); if (!adding && view === "month") setForm({ ...form, date: selDay }); }} style={{ flex: 1, padding: "13px 10px", fontSize: 11 }}>{adding ? "Cancel" : "Add to schedule"}</Primary>
-        </div>
-      )}
-      {adding && view !== "pageants" && <AddForm />}
-
-      {view === "month" && (
-        <>
-          {/* month header */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <button onClick={() => setCursor(new Date(y, m - 1, 1))} className="hq-mono" style={{ border: `1px solid ${B.c.line}`, background: B.c.card, color: B.c.ink, borderRadius: 4, padding: "6px 14px", fontSize: 13 }}>‹</button>
-            <div style={{ fontFamily: B.display, fontSize: 20, fontWeight: 600 }}>{monthLabel}</div>
-            <button onClick={() => setCursor(new Date(y, m + 1, 1))} className="hq-mono" style={{ border: `1px solid ${B.c.line}`, background: B.c.card, color: B.c.ink, borderRadius: 4, padding: "6px 14px", fontSize: 13 }}>›</button>
-          </div>
-
-          {/* weekday header */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", marginBottom: 4 }}>
-            {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-              <div key={i} className="hq-mono" style={{ textAlign: "center", fontSize: 9, letterSpacing: 1, color: B.c.faint, padding: "4px 0" }}>{d}</div>
-            ))}
-          </div>
-
-          {/* grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 16 }}>
-            {cells.map((d, i) => {
-              if (!d) return <div key={"b" + i} />;
-              const items = byDate[d] || [];
-              const isToday = d === today;
-              const isSel = d === selDay;
-              return (
-                <button key={d} onClick={() => setSelDay(d)}
-                  style={{
-                    aspectRatio: "1 / 1.05", border: `1px solid ${isSel ? B.c.accent : B.c.line}`, borderRadius: 6,
-                    background: isSel ? B.c.deep : B.c.card, color: isSel ? B.c.gold : isToday ? B.c.accent : B.c.ink,
-                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: 2,
-                  }}>
-                  <span className="hq-mono" style={{ fontSize: 12, fontWeight: isToday || isSel ? 600 : 400 }}>{Number(d.slice(-2))}</span>
-                  <span style={{ display: "flex", gap: 2, height: 5 }}>
-                    {items.slice(0, 3).map((it, j) => (
-                      <span key={j} style={{ width: 4, height: 4, borderRadius: "50%", background: isSel ? B.c.gold : dotColor(it.type) }} />
-                    ))}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* selected day */}
-          <div style={{ fontFamily: B.display, fontSize: 16, fontWeight: 600, color: selDay === today ? B.c.accent : B.c.ink, marginBottom: 2 }}>{prettyDay(selDay)}</div>
-          <hr className="lux-rule" style={{ margin: "0 0 10px" }} />
-          {(byDate[selDay] || []).length === 0 && (
-            <p style={{ fontSize: 13.5, fontWeight: 300, color: B.c.faint }}>Nothing scheduled this day — tap "Add to schedule" to book it.</p>
-          )}
-          {(byDate[selDay] || []).map(ItemCard)}
-        </>
-      )}
-
-      {["lesson", "tan", "dance"].includes(view) && (() => {
-        const typed = agenda.filter((e) => e.type === view);
-        const groups = Object.entries(typed.reduce((acc, e) => { (acc[e.date] = acc[e.date] || []).push(e); return acc; }, {}));
-        const emptyMsg = view === "lesson" ? "No pageant lessons on the books yet." : view === "tan" ? "No tans on the books yet." : "No dance lessons on the books yet.";
-        return (
-          <>
-            {typed.length === 0 && !adding && (
-              <Empty B={B} mark={EVENT_TYPES[view].mark} title={emptyMsg}
-                body={view === "tan" ? "Square bookings land here automatically once they're synced."
-                  : view === "dance" ? "Add one with the + button above."
-                  : "Bookings from Square show up here on their own."} />
-            )}
-            {groups.map(([day, list]) => (
-              <div key={day} style={{ marginBottom: 18 }}>
-                <div className="hq-daystick" style={{ background: B.c.bg, paddingTop: 4 }}>
-                  <div style={{ fontFamily: B.display, fontSize: 16, fontWeight: 600, color: day === today ? B.c.accent : B.c.ink, marginBottom: 2 }}>{prettyDay(day)}</div>
-                  <hr className="lux-rule" style={{ margin: "0 0 10px" }} />
-                </div>
-                {list.map(ItemCard)}
-              </div>
-            ))}
-          </>
-        );
-      })()}
-
-      {view === "pageants" && <PageantsPane B={B} pageants={pageants} savePageants={savePageants} />}
-    </div>
-  );
-}
-
-/* ================= DIRECTING ================= */
-function DirectingPane({ B, directing, saveDirecting }) {
-  const { Field, input, Primary, card, H } = useBrandBits(B);
-  const [open, setOpen] = useState(null);
-  const [adding, setAdding] = useState(false);
-  const blank = { name: "", date: "", location: "", notes: "" };
-  const [form, setForm] = useState(blank);
-
-  const totals = (d) => {
-    const fees = (d.entries || []).reduce((s, e) => s + (e.paid ? (e.fee || 0) : 0), 0);
-    const feesDue = (d.entries || []).reduce((s, e) => s + (!e.paid ? (e.fee || 0) : 0), 0);
-    const other = (d.income || []).reduce((s, i) => s + (i.amount || 0), 0);
-    const exp = (d.expenses || []).reduce((s, x) => s + (x.amount || 0), 0);
-    return { fees, feesDue, other, exp, net: fees + other - exp };
-  };
-
-  const addDirected = async () => {
-    if (!form.name.trim()) return;
-    await saveDirecting([...directing, { ...form, id: "d" + Date.now(), entries: [], income: [], expenses: [] }]);
-    setForm(blank); setAdding(false);
-  };
-
-  return (
-    <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-        <H size={20}>Productions</H>
-        <button onClick={() => setAdding(!adding)} className="hq-mono"
-          style={{ padding: "8px 16px", borderRadius: 3, border: "none", background: B.c.deep, color: B.c.gold, fontSize: 10, letterSpacing: 2 }}>
-          {adding ? "CANCEL" : "+ ADD"}
-        </button>
-      </div>
-      <p style={{ fontSize: 13, fontWeight: 300, color: B.c.faint, margin: "0 0 14px" }}>
-        The production ledger — entry fees, concessions, and event expenses for each pageant.
-      </p>
-
-      {adding && (
-        <div className="hq-fade" style={{ ...card, padding: 18, marginBottom: 16 }}>
-          <Field label="Pageant name"><input style={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-          <div style={{ display: "flex", gap: 10 }}>
-            <div style={{ flex: 1 }}><Field label="Date"><input style={input} type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field></div>
-            <div style={{ flex: 1 }}><Field label="Venue"><input style={input} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></Field></div>
-          </div>
-          <Primary onClick={addDirected} disabled={!form.name.trim()}>Save</Primary>
-        </div>
-      )}
-
-      {directing.map((d) => {
-        const t = totals(d);
-        return (
-          <button key={d.id} onClick={() => setOpen(d.id)}
-            style={{ ...card, width: "100%", textAlign: "left", padding: "16px 17px", marginBottom: 12, borderLeft: `2px solid ${B.c.accent}`, cursor: "pointer" }}>
-            <div style={{ fontFamily: B.display, fontWeight: 600, fontSize: 19 }}><span style={{ color: B.c.accent }}>♛</span> {d.name}</div>
-            <div className="hq-mono" style={{ fontSize: 10, letterSpacing: 1, color: B.c.faint, margin: "4px 0 10px" }}>
-              {d.date || "DATE TBD"}{d.location ? ` · ${d.location.toUpperCase()}` : ""} · {(d.entries || []).length} CONTESTANTS
-            </div>
-            <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-              {[["FEES IN", money(t.fees)], ["CONCESSIONS+", money(t.other)], ["EXPENSES", money(t.exp)], ["NET", money(t.net)]].map(([lab, val]) => (
-                <div key={lab}>
-                  <div className="hq-mono" style={{ fontSize: 13, fontWeight: 500, color: lab === "NET" ? (t.net >= 0 ? "#4E6B4E" : "#8A4646") : B.c.ink }}>{val}</div>
-                  <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.5, color: B.c.faint, marginTop: 1 }}>{lab}</div>
-                </div>
-              ))}
-            </div>
-          </button>
-        );
-      })}
-
-      {open && (
-        <DirectedDetail B={B} d={directing.find((x) => x.id === open)} totals={totals} onClose={() => setOpen(null)}
-          onChange={async (u) => saveDirecting(directing.map((x) => (x.id === u.id ? u : x)))}
-          onDelete={async () => { await saveDirecting(directing.filter((x) => x.id !== open)); setOpen(null); }} />
-      )}
-    </>
-  );
-}
-
-function DirectedDetail({ B, d, totals, onClose, onChange, onDelete }) {
-  const { input, chip } = useBrandBits(B);
-  const [sub, setSub] = useState("entries");
-  const [entry, setEntry] = useState({ name: "", division: "", fee: "" });
-  const [line, setLine] = useState({ date: new Date().toISOString().slice(0, 10), desc: "", amount: "" });
-  if (!d) return null;
-  const t = totals(d);
-
-  const addEntry = () => {
-    if (!entry.name.trim()) return;
-    onChange({ ...d, entries: [...(d.entries || []), { id: "n" + Date.now(), ...entry, fee: Number(entry.fee) || 0, paid: false }] });
-    setEntry({ name: "", division: "", fee: "" });
-  };
-  const togglePaid = (id) => onChange({ ...d, entries: d.entries.map((e) => (e.id === id ? { ...e, paid: !e.paid } : e)) });
-  const addLine = (key) => {
-    if (!line.desc.trim() || !line.amount) return;
-    onChange({ ...d, [key]: [...(d[key] || []), { id: "l" + Date.now(), ...line, amount: Number(line.amount) || 0 }] });
-    setLine({ date: new Date().toISOString().slice(0, 10), desc: "", amount: "" });
-  };
-
-  return (
-    <Sheet B={B} onClose={onClose}>
-      <div style={{ fontFamily: B.display, fontSize: 24, fontWeight: 600 }}><span style={{ color: B.c.accent }}>♛</span> {d.name}</div>
-      <div className="hq-mono" style={{ fontSize: 10, letterSpacing: 1.5, color: B.c.faint, margin: "5px 0 12px" }}>
-        {d.date || "DATE TBD"}{d.location ? ` · ${d.location.toUpperCase()}` : ""}
-      </div>
-
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", background: B.c.card, border: `1px solid ${B.c.line}`, borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
-        {[["FEES COLLECTED", money(t.fees)], ["FEES DUE", money(t.feesDue)], ["CONCESSIONS+", money(t.other)], ["EXPENSES", money(t.exp)], ["NET", money(t.net)]].map(([lab, val]) => (
-          <div key={lab}>
-            <div className="hq-mono" style={{ fontSize: 13.5, fontWeight: 500, color: lab === "NET" ? (t.net >= 0 ? "#4E6B4E" : "#8A4646") : lab === "FEES DUE" && t.feesDue > 0 ? "#8A6D3B" : B.c.ink }}>{val}</div>
-            <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.5, color: B.c.faint, marginTop: 1 }}>{lab}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
-        {[["entries", "ENTRIES"], ["income", "CONCESSIONS+"], ["expenses", "EXPENSES"]].map(([v, lab]) => (
-          <button key={v} className="hq-mono" style={{ ...chip(sub === v), flex: 1, textAlign: "center", fontSize: 9 }} onClick={() => setSub(v)}>{lab}</button>
-        ))}
-      </div>
-
-      {sub === "entries" && (
-        <>
-          {(d.entries || []).map((e) => (
-            <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 10, background: B.c.card, border: `1px solid ${B.c.line}`, borderRadius: 6, padding: "10px 12px", marginBottom: 8 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 500, fontSize: 14 }}>{e.name}</div>
-                <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 1.5, color: B.c.faint, marginTop: 1 }}>{(e.division || "—").toUpperCase()} · {money(e.fee)}</div>
-              </div>
-              <button onClick={() => togglePaid(e.id)} className="hq-mono"
-                style={{ padding: "5px 11px", borderRadius: 2, fontSize: 9, letterSpacing: 1.5, border: `1px solid ${e.paid ? "#4E6B4E" : "#8A6D3B"}`, background: "transparent", color: e.paid ? "#4E6B4E" : "#8A6D3B" }}>
-                {e.paid ? "PAID" : "DUE"}
-              </button>
-              <button onClick={() => onChange({ ...d, entries: d.entries.filter((x) => x.id !== e.id) })} style={{ border: "none", background: "none", color: B.c.faint, fontSize: 15, padding: 2 }}>✕</button>
-            </div>
-          ))}
-          {(d.entries || []).length === 0 && <p style={{ fontSize: 13, fontWeight: 300, color: B.c.faint }}>No contestants entered yet.</p>}
-          <div style={{ display: "flex", gap: 8, marginTop: 8, marginBottom: 8 }}>
-            <input style={{ ...input, flex: 1.3 }} placeholder="Contestant" value={entry.name} onChange={(e) => setEntry({ ...entry, name: e.target.value })} />
-            <input style={{ ...input, flex: 1 }} placeholder="Division" value={entry.division} onChange={(e) => setEntry({ ...entry, division: e.target.value })} />
-            <input className="hq-mono" style={{ ...input, flex: 0.7 }} type="number" placeholder="Fee $" value={entry.fee} onChange={(e) => setEntry({ ...entry, fee: e.target.value })} />
-          </div>
-          <button onClick={addEntry} disabled={!entry.name.trim()}
-            style={{ width: "100%", padding: 13, borderRadius: 4, border: "none", background: entry.name.trim() ? B.c.accent : "#CBC2B4", color: "#fff", fontWeight: 500, fontSize: 12, letterSpacing: 2, textTransform: "uppercase" }}>
-            Add contestant
-          </button>
-          <p style={{ fontSize: 11.5, fontWeight: 300, color: B.c.faint, marginTop: 8 }}>Tap DUE to mark an entry fee as received — only paid fees count toward the totals.</p>
-        </>
-      )}
-
-      {(sub === "income" || sub === "expenses") && (
-        <>
-          {(d[sub] || []).map((l) => (
-            <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, background: B.c.card, border: `1px solid ${B.c.line}`, borderRadius: 6, padding: "10px 12px", marginBottom: 8 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 500, fontSize: 14 }}>{l.desc}</div>
-                <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 1.5, color: B.c.faint, marginTop: 1 }}>{l.date}</div>
-              </div>
-              <span className="hq-mono" style={{ fontWeight: 500, fontSize: 13.5, color: sub === "income" ? "#4E6B4E" : B.c.ink }}>{money(l.amount)}</span>
-              <button onClick={() => onChange({ ...d, [sub]: d[sub].filter((x) => x.id !== l.id) })} style={{ border: "none", background: "none", color: B.c.faint, fontSize: 15, padding: 2 }}>✕</button>
-            </div>
-          ))}
-          {(d[sub] || []).length === 0 && (
-            <p style={{ fontSize: 13, fontWeight: 300, color: B.c.faint }}>
-              {sub === "income" ? "Concessions, ad pages, vendor tables, program sales — log every dollar in." : "Venue, crowns, sashes, judges, trophies, printing — log every dollar out."}
-            </p>
-          )}
-          <div style={{ display: "flex", gap: 8, marginTop: 8, marginBottom: 8 }}>
-            <input style={{ ...input, flex: 1 }} type="date" value={line.date} onChange={(e) => setLine({ ...line, date: e.target.value })} />
-            <input style={{ ...input, flex: 1.4 }} placeholder={sub === "income" ? "Concessions night 1…" : "Venue rental…"} value={line.desc} onChange={(e) => setLine({ ...line, desc: e.target.value })} />
-            <input className="hq-mono" style={{ ...input, flex: 0.7 }} type="number" step="0.01" placeholder="$" value={line.amount} onChange={(e) => setLine({ ...line, amount: e.target.value })} />
-          </div>
-          <button onClick={() => addLine(sub)} disabled={!line.desc.trim() || !line.amount}
-            style={{ width: "100%", padding: 13, borderRadius: 4, border: "none", background: line.desc.trim() && line.amount ? B.c.accent : "#CBC2B4", color: "#fff", fontWeight: 500, fontSize: 12, letterSpacing: 2, textTransform: "uppercase" }}>
-            {sub === "income" ? "Record income" : "Record expense"}
-          </button>
-        </>
-      )}
-
-      <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-        <button onClick={onClose} style={{ flex: 1, padding: 13, borderRadius: 4, border: `1px solid ${B.c.deep}`, background: "transparent", color: B.c.deep, fontWeight: 500, fontSize: 11, letterSpacing: 2, textTransform: "uppercase" }}>Close</button>
-        <button onClick={onDelete} style={{ flex: 1, padding: 13, borderRadius: 4, border: "1px solid #8A4646", background: "transparent", color: "#8A4646", fontWeight: 500, fontSize: 11, letterSpacing: 2, textTransform: "uppercase" }}>Delete</button>
-      </div>
-    </Sheet>
-  );
-}
-
-/* ================= PAGEANTS ================= */
-function PageantsPane({ B, pageants, savePageants }) {
-  const { Field, input, Primary, card, H } = useBrandBits(B);
-  const blank = { name: "", date: "", location: "", director: "", system: "", notes: "" };
-  const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState(blank);
-  const [open, setOpen] = useState(null);
-  const today = new Date().toISOString().slice(0, 10);
-
-  const upcoming = pageants.filter((p) => (p.date || "9999") >= today).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-  const past = pageants.filter((p) => (p.date || "9999") < today).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  const daysOut = (d) => { if (!d) return null; const n = Math.ceil((new Date(d + "T12:00") - new Date()) / 86400000); return n >= 0 ? n : null; };
-
-  const addPageant = async () => {
-    if (!form.name.trim()) return;
-    await savePageants([...pageants, { ...form, id: "p" + Date.now(), girls: [] }]);
-    setForm(blank); setAdding(false);
-  };
-
-  const Card = ({ p, dim }) => (
-    <button onClick={() => setOpen(p.id)}
-      style={{ ...card, width: "100%", textAlign: "left", padding: "15px 17px", marginBottom: 12, borderLeft: `2px solid ${dim ? B.c.line : B.c.accent}`, opacity: dim ? 0.65 : 1, cursor: "pointer" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-        <div style={{ fontFamily: B.display, fontWeight: 600, fontSize: 18 }}><span style={{ color: B.c.accent }}>♛</span> {p.name}</div>
-        {daysOut(p.date) !== null && !dim && (
-          <span className="hq-mono" style={{ fontSize: 9, letterSpacing: 2, color: B.c.accent, fontWeight: 500, whiteSpace: "nowrap" }}>
-            {daysOut(p.date) === 0 ? "TODAY" : `IN ${daysOut(p.date)} DAYS`}
-          </span>
-        )}
-      </div>
-      <div className="hq-mono" style={{ fontSize: 10, letterSpacing: 1, color: B.c.faint, marginTop: 4 }}>{p.date || "DATE TBD"}{p.location ? ` · ${p.location.toUpperCase()}` : ""}</div>
-      <div style={{ fontSize: 13, fontWeight: 300, marginTop: 5 }}>
-        {p.system && <span>{p.system} · </span>}{p.director && <span>Director {p.director} · </span>}
-        <span style={{ fontWeight: 500 }}>{(p.girls || []).length}</span> girl{(p.girls || []).length === 1 ? "" : "s"} competing
-      </div>
-    </button>
-  );
-
-  return (
-    <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <H size={20}>Upcoming pageants</H>
-        <button onClick={() => setAdding(!adding)} className="hq-mono"
-          style={{ padding: "8px 16px", borderRadius: 3, border: "none", background: B.c.deep, color: B.c.gold, fontSize: 10, letterSpacing: 2 }}>
-          {adding ? "CANCEL" : "+ ADD"}
-        </button>
-      </div>
-
-      {adding && (
-        <div className="hq-fade" style={{ ...card, padding: 18, marginBottom: 16 }}>
-          <Field label="Pageant name"><input style={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g., Miss Kentucky Preteen" /></Field>
-          <div style={{ display: "flex", gap: 10 }}>
-            <div style={{ flex: 1 }}><Field label="Date"><input style={input} type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field></div>
-            <div style={{ flex: 1 }}><Field label="Location"><input style={input} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="City / venue" /></Field></div>
-          </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <div style={{ flex: 1 }}><Field label="Director"><input style={input} value={form.director} onChange={(e) => setForm({ ...form, director: e.target.value })} /></Field></div>
-            <div style={{ flex: 1 }}><Field label="System"><input style={input} value={form.system} onChange={(e) => setForm({ ...form, system: e.target.value })} placeholder="Natural, Glitz…" /></Field></div>
-          </div>
-          <Field label="Notes"><textarea style={{ ...input, minHeight: 60 }} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Entry deadlines, fees, wardrobe…" /></Field>
-          <Primary onClick={addPageant} disabled={!form.name.trim()}>Save pageant</Primary>
-        </div>
-      )}
-
-      {pageants.length === 0 && !adding && (
-        <div style={{ textAlign: "center", padding: "40px 20px", color: B.c.faint }}>
-          <div style={{ fontFamily: B.display, fontSize: 30, color: B.c.accent }}>♛</div>
-          <p style={{ fontSize: 14, fontWeight: 300 }}>No pageants yet — add the next one and begin the roster.</p>
-        </div>
-      )}
-
-      {upcoming.map((p) => <Card key={p.id} p={p} />)}
-      {past.length > 0 && (
-        <>
-          <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 3, color: B.c.faint, margin: "18px 0 10px" }}>PAST</div>
-          {past.map((p) => <Card key={p.id} p={p} dim />)}
-        </>
-      )}
-
-      {open && (
-        <PageantDetail B={B} pageant={pageants.find((x) => x.id === open)} onClose={() => setOpen(null)}
-          onChange={async (u) => savePageants(pageants.map((x) => (x.id === u.id ? u : x)))}
-          onDelete={async () => { await savePageants(pageants.filter((x) => x.id !== open)); setOpen(null); }} />
-      )}
-    </>
-  );
-}
-
-function PageantDetail({ B, pageant, onClose, onChange, onDelete }) {
-  const { input, Ghost } = useBrandBits(B);
-  const [girl, setGirl] = useState({ name: "", category: "" });
-  if (!pageant) return null;
-  const girls = pageant.girls || [];
-  const addGirl = () => {
-    if (!girl.name.trim()) return;
-    onChange({ ...pageant, girls: [...girls, { id: "g" + Date.now(), ...girl }] });
-    setGirl({ name: "", category: "" });
-  };
-  return (
-    <Sheet B={B} onClose={onClose}>
-      <div style={{ fontFamily: B.display, fontSize: 24, fontWeight: 600 }}><span style={{ color: B.c.accent }}>♛</span> {pageant.name}</div>
-      <div className="hq-mono" style={{ fontSize: 10, letterSpacing: 1.5, color: B.c.faint, margin: "6px 0 4px" }}>{pageant.date || "DATE TBD"}{pageant.location ? ` · ${pageant.location.toUpperCase()}` : ""}</div>
-      <div style={{ fontSize: 13.5, fontWeight: 300, marginBottom: 8 }}>
-        {pageant.system && <span><b style={{ fontWeight: 500 }}>System</b> {pageant.system} &nbsp;</span>}
-        {pageant.director && <span><b style={{ fontWeight: 500 }}>Director</b> {pageant.director}</span>}
-      </div>
-      {pageant.notes && <p style={{ fontSize: 13.5, lineHeight: 1.6, fontWeight: 300, background: B.c.card, borderLeft: `2px solid ${B.c.accent}`, padding: "10px 14px", borderRadius: 4 }}>{pageant.notes}</p>}
-      {pageant.date && (
-
-      )}
-
-      <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 3, color: B.c.faint, margin: "18px 0 10px" }}>COMPETING · {girls.length}</div>
-      {girls.map((g) => (
-        <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 12, background: B.c.card, border: `1px solid ${B.c.line}`, borderRadius: 6, padding: "10px 13px", marginBottom: 8 }}>
-          <Monogram B={B} text={g.name.trim().charAt(0).toUpperCase()} size={34} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 500, fontSize: 14.5 }}>{g.name}</div>
-            {g.category && <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 2, color: B.c.accent, marginTop: 1 }}>{g.category.toUpperCase()}</div>}
-          </div>
-          <button onClick={() => onChange({ ...pageant, girls: girls.filter((x) => x.id !== g.id) })} aria-label={`Remove ${g.name}`} style={{ border: "none", background: "none", color: B.c.faint, fontSize: 16, padding: 4 }}>✕</button>
-        </div>
-      ))}
-      {girls.length === 0 && <p style={{ fontSize: 13, fontWeight: 300, color: B.c.faint, margin: "4px 0 10px" }}>No girls on the roster yet.</p>}
-
-      <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-        <input style={{ ...input, flex: 1.2 }} placeholder="Girl's name" value={girl.name} onChange={(e) => setGirl({ ...girl, name: e.target.value })} />
-        <input style={{ ...input, flex: 1 }} placeholder="Category / division" value={girl.category} onChange={(e) => setGirl({ ...girl, category: e.target.value })} onKeyDown={(e) => e.key === "Enter" && addGirl()} />
-      </div>
-      <button onClick={addGirl} disabled={!girl.name.trim()}
-        style={{ width: "100%", marginTop: 10, padding: 13, borderRadius: 4, border: "none", background: girl.name.trim() ? B.c.accent : "#CBC2B4", color: "#fff", fontWeight: 500, fontSize: 12, letterSpacing: 2, textTransform: "uppercase" }}>
-        Add to roster
-      </button>
-
-      <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-        <button onClick={onClose} style={{ flex: 1, padding: 13, borderRadius: 4, border: `1px solid ${B.c.deep}`, background: "transparent", color: B.c.deep, fontWeight: 500, fontSize: 11, letterSpacing: 2, textTransform: "uppercase" }}>Close</button>
-        <button onClick={onDelete} style={{ flex: 1, padding: 13, borderRadius: 4, border: "1px solid #8A4646", background: "transparent", color: "#8A4646", fontWeight: 500, fontSize: 11, letterSpacing: 2, textTransform: "uppercase" }}>Delete</button>
-      </div>
-    </Sheet>
-  );
-}
-
-/* ================= CLIENT PORTAL ================= */
-function ClientPortal({ client, events, saveEvents, pageants, onExit }) {
-  const B = client.biz?.PP ? BRANDS.pp : client.biz?.VG ? BRANDS.vg : BRANDS.re;
-  const { input } = useBrandBits(B);
-  const today = new Date().toISOString().slice(0, 10);
-  const [ev, setEv] = useState({ title: "", date: "", time: "" });
-  const [added, setAdded] = useState(false);
-
-  const firstName = client.name.trim().split(" ")[0];
-  const mine = events.filter((e) => (e.clientName || "").toLowerCase() === client.name.toLowerCase());
-  const upcoming = mine.filter((e) => e.date >= today).sort((a, b) => a.date.localeCompare(b.date) || (a.time || "").localeCompare(b.time || ""));
-  const myPageants = client.biz?.PP
-    ? pageants.filter((p) => (p.girls || []).some((g) => g.name.toLowerCase() === client.name.toLowerCase()) && (p.date || "9999") >= today)
-        .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
-    : [];
-  const history = (client.history || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  const daysOut = (d) => Math.ceil((new Date(d + "T12:00") - new Date()) / 86400000);
-  const prettyDate = (d) => new Date(d + "T12:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-
-  const addMyEvent = async () => {
-    if (!ev.title.trim() || !ev.date) return;
-    await saveEvents([...events, { id: "e" + Date.now(), type: "client", title: ev.title, clientName: client.name, date: ev.date, time: ev.time, durMin: 60, notes: "Added by client via portal" }]);
-    setEv({ title: "", date: "", time: "" });
-    setAdded(true); setTimeout(() => setAdded(false), 2500);
-  };
-
-  const SectionLabel = ({ children }) => (
-    <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 3, color: B.c.faint, margin: "20px 0 10px" }}>{children}</div>
-  );
-  const card = { background: B.c.card, borderRadius: 8, border: `1px solid ${B.c.line}` };
-  const infoRow = (label, val) => val ? (
-    <div style={{ display: "flex", gap: 10, fontSize: 13.5, marginBottom: 5 }}>
-      <span className="hq-mono" style={{ fontSize: 9, letterSpacing: 2, color: B.c.faint, minWidth: 92, paddingTop: 3 }}>{label.toUpperCase()}</span>
-      <span style={{ flex: 1, fontWeight: 300 }}>{val}</span>
-    </div>
-  ) : null;
-
-  return (
-    <div className="hq" style={{ position: "fixed", inset: 0, zIndex: 100, background: B.c.bg, color: B.c.ink, overflowY: "auto", "--focus": B.c.accent }}>
-      <div style={{ position: "sticky", top: 0, zIndex: 5, background: "#3B3325", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 16px" }}>
-        <span className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 2.5, color: "#E8D5A6" }}>PORTAL PREVIEW — WHAT {firstName.toUpperCase()} WILL SEE</span>
-        <button onClick={onExit} className="hq-mono"
-          style={{ padding: "6px 14px", borderRadius: 3, border: "1px solid #E8D5A6", background: "transparent", color: "#E8D5A6", fontSize: 9, letterSpacing: 2 }}>
-          EXIT
-        </button>
-      </div>
-
-      <div style={{
-        background: B.key === "vg"
-          ? `radial-gradient(140% 180% at 50% -40%, ${B.c.deep2} 0%, ${B.c.deep} 70%)`
-          : `linear-gradient(160deg, ${B.c.deep} 20%, ${B.c.deep2} 100%)`,
-        textAlign: "center", padding: "30px 20px 26px", color: B.c.soft,
-      }}>
-        <div style={{ display: "grid", placeItems: "center", marginBottom: 12 }}>
-          <Monogram B={B} text={firstName.charAt(0)} size={62} fill={B.c.gold} />
-        </div>
-        <div style={{ fontFamily: B.display, fontStyle: "italic", fontSize: 16, color: B.c.gold }}>Welcome back,</div>
-        <div style={{ fontFamily: B.display, fontSize: 30, fontWeight: 600, letterSpacing: 1, lineHeight: 1.1 }}>{client.name}</div>
-        <hr className="lux-rule" style={{ width: 120, margin: "12px auto 10px", "--metal-mid": B.c.gold }} />
-        <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 3, color: B.c.gold }}>
-          {client.biz?.RE && "◈ PAIGE SWOPE REALTY   "}{client.biz?.PP && "♛ PAGEANT PERFECT   "}{client.biz?.VG && "✦ VELVET GLOW"}
-        </div>
-      </div>
-
-      <div style={{ maxWidth: 560, margin: "0 auto", padding: "6px 16px 60px" }}>
-        <SectionLabel>MY UPCOMING VISITS · {upcoming.length}</SectionLabel>
-        {upcoming.length === 0 && <p style={{ fontSize: 13.5, fontWeight: 300, color: B.c.faint }}>Nothing booked yet — reserve your next visit below.</p>}
-        {upcoming.map((e) => (
-          <div key={e.id} style={{ ...card, padding: "13px 15px", marginBottom: 8, borderLeft: `2px solid ${B.c.accent}` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-              <div style={{ fontWeight: 500, fontSize: 14.5 }}><span style={{ color: B.c.accent, marginRight: 6 }}>{EVENT_TYPES[e.type]?.mark}</span>{e.title}</div>
-              <div className="hq-mono" style={{ fontSize: 10, color: B.c.faint, whiteSpace: "nowrap" }}>{prettyDate(e.date)} · {prettyTime(e.time)}</div>
-            </div>
-            <button onClick={() => downloadICS(`${e.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.ics`, [{ title: e.title, date: e.date, time: e.time || "", durMin: e.durMin }])}
-              className="hq-mono" style={{ border: "none", background: "none", color: B.c.accent, fontSize: 9.5, letterSpacing: 2, padding: 0, marginTop: 7, fontWeight: 500 }}>
-              ADD TO MY IPHONE
-            </button>
-          </div>
-        ))}
-
-        {client.biz?.PP && (
-          <>
-            <SectionLabel>MY PAGEANT SEASON</SectionLabel>
-            {myPageants.length === 0 && <p style={{ fontSize: 13.5, fontWeight: 300, color: B.c.faint }}>No pageants on the calendar yet — Coach Paige will add you when it's time.</p>}
-            {myPageants.map((p) => {
-              const g = (p.girls || []).find((x) => x.name.toLowerCase() === client.name.toLowerCase());
-              return (
-                <div key={p.id} style={{ ...card, padding: "14px 16px", marginBottom: 10, borderLeft: `2px solid ${B.c.gold}` }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                    <div style={{ fontFamily: B.display, fontWeight: 600, fontSize: 17 }}><span style={{ color: B.c.accent }}>♛</span> {p.name}</div>
-                    {p.date && <span className="hq-mono" style={{ fontSize: 9, letterSpacing: 2, color: B.c.accent, fontWeight: 500 }}>{daysOut(p.date) === 0 ? "TODAY" : `IN ${daysOut(p.date)} DAYS`}</span>}
-                  </div>
-                  <div className="hq-mono" style={{ fontSize: 9.5, letterSpacing: 1, color: B.c.faint, marginTop: 3 }}>{p.date}{p.location ? ` · ${p.location.toUpperCase()}` : ""}</div>
-                  {g?.category && <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 2, color: B.c.accent, marginTop: 6 }}>COMPETING · {g.category.toUpperCase()}</div>}
-                </div>
-              );
-            })}
-          </>
-        )}
-
-        {client.biz?.RE && (
-          <>
-            <SectionLabel>MY HOME JOURNEY</SectionLabel>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <a href={`mailto:${BRANDS.re.email}?subject=Home valuation request`} style={{ ...card, padding: "13px 15px", textDecoration: "none", color: B.c.ink, borderLeft: `2px solid ${BRANDS.re.c.accent}` }}>
-                <div style={{ fontWeight: 500, fontSize: 14.5 }}>◈ Request a home valuation</div>
-                <div style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, marginTop: 2 }}>Paige will reach out personally with what your home is worth.</div>
-              </a>
-              <a href={BRANDS.re.financeUrl} target="_blank" rel="noreferrer" style={{ ...card, padding: "13px 15px", textDecoration: "none", color: B.c.ink, borderLeft: `2px solid ${BRANDS.re.c.accent}` }}>
-                <div style={{ fontWeight: 500, fontSize: 14.5 }}>◈ Financing &amp; pre-approval</div>
-                <div style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, marginTop: 2 }}>The Henderson Team — $500 off closing costs for coaching &amp; glow clients</div>
-              </a>
-            </div>
-          </>
-        )}
-
-        <SectionLabel>RESERVE</SectionLabel>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {client.biz?.PP && (
-            <a href={BRANDS.pp.bookBase} target="_blank" rel="noreferrer"
-              style={{ flex: 1, minWidth: 150, textAlign: "center", padding: "13px 14px", borderRadius: 4, background: BRANDS.pp.c.metal, color: BRANDS.pp.c.deep, fontWeight: 600, fontSize: 11, letterSpacing: 2, textTransform: "uppercase", textDecoration: "none" }}>
-              ♛ Book a lesson
+            <a href={`sms:+1${String(BRANDS.re.phone).replace(/\D/g, "").slice(-10)}`} className="hq-mono hq-press"
+              style={{ display: "block", padding: "15px 0", borderRadius: 8, textAlign: "center", textDecoration: "none",
+                background: `linear-gradient(95deg, ${DEEP}, #12939A 45%, ${TEAL})`, color: INK,
+                fontSize: 11, letterSpacing: 2.5, fontWeight: 700 }}>
+              TEXT PAIGE ABOUT THE PAGEANT
             </a>
-          )}
-          {client.biz?.VG && (
-            <a href={BRANDS.vg.bookBase} target="_blank" rel="noreferrer"
-              style={{ flex: 1, minWidth: 150, textAlign: "center", padding: "13px 14px", borderRadius: 4, background: BRANDS.vg.c.metal, color: BRANDS.vg.c.deep, fontWeight: 600, fontSize: 11, letterSpacing: 2, textTransform: "uppercase", textDecoration: "none" }}>
-              ✦ Book a glow
-            </a>
-          )}
-          {client.biz?.RE && (
-            <a href={`sms:+1${BRANDS.re.phone}`}
-              style={{ flex: 1, minWidth: 150, textAlign: "center", padding: "13px 14px", borderRadius: 4, background: BRANDS.re.c.metal, color: BRANDS.re.c.deep, fontWeight: 600, fontSize: 11, letterSpacing: 2, textTransform: "uppercase", textDecoration: "none" }}>
-              ◈ Text Paige
-            </a>
-          )}
-        </div>
-
-        <SectionLabel>ADD MY OWN EVENT</SectionLabel>
-        <div style={{ ...card, padding: 15 }}>
-          <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 10px" }}>
-            Have a recital, game, closing date, or family event Paige should plan around? Add it here — it shows on her calendar too.
-          </p>
-          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-            <input style={{ ...input, flex: 1.4 }} placeholder="Event — e.g., dance recital" value={ev.title} onChange={(e) => setEv({ ...ev, title: e.target.value })} />
-          </div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-            <input style={{ ...input, flex: 1.2 }} type="date" value={ev.date} onChange={(e) => setEv({ ...ev, date: e.target.value })} />
-            <input style={{ ...input, flex: 1 }} type="time" value={ev.time} onChange={(e) => setEv({ ...ev, time: e.target.value })} />
-          </div>
-          <button onClick={addMyEvent} disabled={!ev.title.trim() || !ev.date}
-            style={{ width: "100%", padding: 13, borderRadius: 4, border: "none", background: ev.title.trim() && ev.date ? B.c.accent : "#CBC2B4", color: "#fff", fontWeight: 500, fontSize: 12, letterSpacing: 2, textTransform: "uppercase" }}>
-            {added ? "Added to the calendar ✓" : "Share with Paige"}
-          </button>
-        </div>
-
-        {(client.undertone || client.shade || client.skinNotes || client.division || client.goals) && (
-          <>
-            <SectionLabel>MY PROFILE</SectionLabel>
-            <div style={{ ...card, padding: "14px 16px" }}>
-              {infoRow("Undertone", client.undertone)}
-              {infoRow("My shade", client.shade)}
-              {infoRow("Skin notes", client.skinNotes)}
-              {infoRow("Division", client.division)}
-              {infoRow("Working on", client.goals)}
-            </div>
           </>
         )}
-
-        <SectionLabel>MY VISIT HISTORY · {history.length}</SectionLabel>
-        {history.length === 0 && <p style={{ fontSize: 13.5, fontWeight: 300, color: B.c.faint }}>Your visits will appear here.</p>}
-        {history.map((v) => (
-          <div key={v.id} style={{ ...card, padding: "11px 14px", marginBottom: 8, borderLeft: `2px solid ${B.c.accent}` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <div style={{ fontWeight: 500, fontSize: 14 }}>{v.service}</div>
-              <div className="hq-mono" style={{ fontSize: 10, color: B.c.faint }}>{v.date}</div>
-            </div>
-            {v.style && <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 2, color: B.c.accent, marginTop: 2 }}>{v.style.toUpperCase()}</div>}
-          </div>
-        ))}
-
-        <p className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 2, color: B.c.faint, textAlign: "center", lineHeight: 2, marginTop: 26 }}>
-          PREVIEW ONLY — PRIVATE CLIENT LOGINS ARRIVE<br />WITH THE PORTAL PHASE
-        </p>
       </div>
     </div>
   );
