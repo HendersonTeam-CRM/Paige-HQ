@@ -187,6 +187,21 @@ async function recordPayment(p) {
   return true;
 }
 
+/* ---------- which location? ---------- */
+async function resolveLocation() {
+  const given = (process.env.SQUARE_LOCATION_ID || "").trim();
+  if (given) return { id: given, source: "env" };
+  try {
+    const r = await fetch(`${SQ}/locations`, { headers: sqHeaders() });
+    const j = await r.json();
+    const list = j.locations || [];
+    const active = list.find((l) => l.status === "ACTIVE") || list[0];
+    return active ? { id: active.id, source: "auto", name: active.name } : { id: "", source: "none", errors: j.errors };
+  } catch (e) {
+    return { id: "", source: "error", detail: String(e) };
+  }
+}
+
 /* ---------- signature check ---------- */
 function verified(req, rawBody) {
   const key = process.env.SQUARE_WEBHOOK_KEY;
@@ -214,31 +229,88 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Square sync isn't configured yet — add the environment variables in Vercel." });
   }
 
+  /* ---- her customer list, for the one-off import ---- */
+  if (req.method === "GET" && req.query.customers) {
+    try {
+      const out = [];
+      let cursor = "";
+      /* Square pages at 100; walk it so a full book comes back in one go */
+      for (let page = 0; page < 20; page++) {
+        const url = `${SQ}/customers?limit=100&sort_field=CREATED_AT&sort_order=DESC` + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
+        const r = await fetch(url, { headers: sqHeaders() });
+        const j = await r.json();
+        if (j.errors) return res.status(400).json({ error: j.errors[0]?.detail || "Square rejected the request", code: j.errors[0]?.code });
+        for (const c of j.customers || []) {
+          const name = [c.given_name, c.family_name].filter(Boolean).join(" ").trim() || c.company_name || "";
+          const phone = String(c.phone_number || "").replace(/\D/g, "").slice(-10);
+          if (!name && !phone) continue;
+          out.push({ name, phone, email: c.email_address || "", note: c.note || "", created: (c.created_at || "").slice(0, 10) });
+        }
+        cursor = j.cursor || "";
+        if (!cursor) break;
+      }
+      return res.status(200).json({ ok: true, count: out.length, customers: out });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: "Could not read your customers", detail: String(e) });
+    }
+  }
+
   /* ---- on-demand pull: the Sync Square button ---- */
   if (req.method === "GET") {
     try {
+      const loc = await resolveLocation();
+      if (!loc.id) {
+        return res.status(400).json({
+          error: "Couldn't find a Square location — check the access token is a PRODUCTION token.",
+          detail: loc.errors || loc.detail || null,
+        });
+      }
+
       const start = new Date();
       const end = new Date(Date.now() + 60 * 86400000);
-      const url = `${SQ}/bookings?limit=200&location_id=${process.env.SQUARE_LOCATION_ID || ""}` +
+      const url = `${SQ}/bookings?limit=200&location_id=${encodeURIComponent(loc.id)}` +
         `&start_at_min=${start.toISOString()}&start_at_max=${end.toISOString()}`;
       const r = await fetch(url, { headers: sqHeaders() });
       const j = await r.json();
-      if (j.errors) return res.status(400).json({ error: j.errors[0]?.detail || "Square rejected the request" });
 
+      if (j.errors) {
+        return res.status(400).json({
+          error: j.errors[0]?.detail || "Square rejected the request",
+          code: j.errors[0]?.code || null,
+          hint: /PERMISSION|FORBIDDEN|UNAUTHORIZED/i.test(j.errors[0]?.code || "")
+            ? "The token is missing a permission — it needs APPOINTMENTS_READ, CUSTOMERS_READ, ITEMS_READ and PAYMENTS_READ."
+            : null,
+          location: loc.id,
+        });
+      }
+
+      const found = (j.bookings || []).length;
       const evts = [];
       for (const b of j.bookings || []) evts.push(await toEvent(b));
       const result = await upsertEvents(evts);
 
-      // catch up on the last 30 days of payments too
-      let paid = 0;
+      let paid = 0, payErr = null;
       try {
         const since = new Date(Date.now() - 30 * 86400000).toISOString();
         const pr = await fetch(`${SQ}/payments?begin_time=${since}&limit=100&sort_order=DESC`, { headers: sqHeaders() });
         const pj = await pr.json();
+        if (pj.errors) payErr = pj.errors[0]?.detail || null;
         for (const p of pj.payments || []) { if (await recordPayment(p)) paid++; }
-      } catch (e) { console.error("payment backfill", e); }
+      } catch (e) { payErr = String(e); }
 
-      return res.status(200).json({ ok: true, looked_at: (j.bookings || []).length, paid, ...result });
+      return res.status(200).json({
+        ok: true,
+        location: loc.id,
+        locationSource: loc.source,
+        found,
+        paid,
+        payErr,
+        ...result,
+        note: found === 0
+          ? "Square returned no bookings in the next 60 days for this location. If you just made a test booking, check it's on this same location and in the future."
+          : undefined,
+      });
     } catch (e) {
       console.error(e);
       return res.status(500).json({ error: "Sync failed", detail: String(e) });
@@ -247,7 +319,10 @@ export default async function handler(req, res) {
 
   /* ---- webhooks ---- */
   if (req.method === "POST") {
-    const raw = await readRaw(req);
+    let raw = "";
+    if (typeof req.body === "string") raw = req.body;
+    else if (req.body && Object.keys(req.body).length) raw = JSON.stringify(req.body);
+    else raw = await readRaw(req);
     if (!verified(req, raw)) return res.status(401).json({ error: "bad signature" });
 
     let body;
