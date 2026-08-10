@@ -374,11 +374,17 @@ html { scroll-behavior: smooth; }
 }
 
 /* a line of news that drifts past above the hero */
-.hq-ticker { overflow: hidden; position: relative; -webkit-mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent); }
-.hq-ticker-track { display: inline-flex; align-items: center; gap: 34px; white-space: nowrap; will-change: transform;
-  animation: hqTick var(--tick, 34s) linear infinite; }
-@keyframes hqTick { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.hq-ticker { overflow: hidden; position: relative;
+  -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent);
+  mask-image: linear-gradient(90deg, #000 92%, transparent); }
+.hq-ticker-track { display: inline-flex; align-items: center; gap: 30px; white-space: nowrap;
+  will-change: transform; -webkit-backface-visibility: hidden; backface-visibility: hidden;
+  animation-name: hqTick; animation-timing-function: linear; animation-iteration-count: infinite;
+  animation-duration: 34s; }
+@keyframes hqTick {
+  from { -webkit-transform: translate3d(0, 0, 0); transform: translate3d(0, 0, 0); }
+  to { -webkit-transform: translate3d(-50%, 0, 0); transform: translate3d(-50%, 0, 0); }
+}
 @media (prefers-reduced-motion: reduce) { .hq-ticker-track { animation: none; } .hq-ticker { mask-image: none; -webkit-mask-image: none; } }
 
 /* the bit that has to shout */
@@ -1553,7 +1559,7 @@ function NewsTicker({ hub, alerts = [], gallery = [], reviews = [], pageants = [
   const run = [...items, ...items].map((it, i) => (
     <span key={it.key + "-" + i}
       onClick={() => it.go && onGo(it.go)}
-      style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 15, fontWeight: 300,
+      style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 300,
         color: LUXE.champagne, cursor: it.go ? "pointer" : "default" }}>
       {it.node}
       <span style={{ color: LUXE.edge, margin: "0 4px" }}>◆</span>
@@ -1562,22 +1568,25 @@ function NewsTicker({ hub, alerts = [], gallery = [], reviews = [], pageants = [
 
   return (
     <div style={owner ? {
-      borderRadius: 10, padding: "9px 0 11px", marginBottom: 13,
+      borderRadius: 8, padding: "5px 0 6px", marginBottom: 12,
       background: `linear-gradient(180deg, ${LUXE.deep2} 0%, ${LUXE.deep} 100%)`,
       boxShadow: "0 3px 12px rgba(20,15,10,.20)",
     } : {
       /* bleed past main's padding so it runs edge to edge under the header */
-      margin: "-20px -16px 16px", padding: "10px 0 12px",
+      margin: "-20px -16px 14px", padding: "5px 0 6px",
       background: `linear-gradient(180deg, ${LUXE.deep2} 0%, ${LUXE.deep} 100%)`,
       borderBottom: `1px solid ${LUXE.edge}`,
       boxShadow: "0 3px 10px rgba(20,15,10,.16)",
     }}>
-      <div className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 3.5, color: LUXE.gold, opacity: 0.62, textAlign: "center", marginBottom: 7 }}>
-        {owner ? "LIVE ON YOUR SITE" : "WHAT'S NEW"}
-      </div>
-      <div className="hq-ticker">
-        <div className="hq-ticker-track" style={{ "--tick": `${Math.max(26, items.length * 13)}s` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: owner ? 11 : 14 }}>
+        <span className="hq-mono" style={{ flexShrink: 0, fontSize: 6, letterSpacing: 1.6, color: LUXE.deep,
+          background: LUXE.gold, borderRadius: 3, padding: "3px 6px", fontWeight: 700 }}>
+          {owner ? "LIVE" : "NEW"}
+        </span>
+        <div className="hq-ticker" style={{ flex: 1, minWidth: 0 }}>
+        <div className="hq-ticker-track" style={{ animationDuration: `${Math.max(26, items.length * 13)}s` }}>
           {run}
+        </div>
         </div>
       </div>
     </div>
