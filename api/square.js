@@ -92,7 +92,9 @@ async function serviceName(variationId) {
     const parentId = j.object?.item_variation_data?.item_id;
     const parent = (j.related_objects || []).find((o) => o.id === parentId);
     const item = parent?.item_data?.name || "";
-    const variation = j.object?.item_variation_data?.name || "";
+    let variation = j.object?.item_variation_data?.name || "";
+    /* Square names every default variation "Regular" — it tells her nothing */
+    if (/^(regular|standard|default|normal)$/i.test(variation.trim())) variation = "";
     return [item, variation].filter(Boolean).join(" · ");
   } catch { return ""; }
 }
