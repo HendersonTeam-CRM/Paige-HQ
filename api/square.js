@@ -66,11 +66,12 @@ function localParts(iso) {
 }
 
 /* Velvet Glow vs Pageant Perfect, guessed from the service name */
-function classify(name = "") {
-  const n = name.toLowerCase();
-  if (/(glow|tan|bronz|airbrush)/.test(n)) return { type: "tan", title: name || "Velvet Glow" };
+function classify(name = "", locationName = "") {
+  const n = (name + " " + locationName).toLowerCase();
+  if (/(glow|tan|bronz|airbrush|spray)/.test(n)) return { type: "tan", title: name || "Velvet Glow" };
   if (/(dance)/.test(n)) return { type: "dance", title: name || "Dance lesson" };
-  return { type: "lesson", title: name || "Private Coaching" };
+  if (/(coach|lesson|interview|walk|stage|pageant|prep)/.test(n)) return { type: "lesson", title: name || "Private Coaching" };
+  return { type: "lesson", title: name || "Appointment" };
 }
 
 async function customerName(id) {
@@ -96,10 +97,10 @@ async function serviceName(variationId) {
   } catch { return ""; }
 }
 
-async function toEvent(b) {
+async function toEvent(b, locationNames = {}) {
   const seg = (b.appointment_segments || [])[0] || {};
   const svc = await serviceName(seg.service_variation_id);
-  const { type, title } = classify(svc);
+  const { type, title } = classify(svc, locationNames[b.location_id] || "");
   const { date, time } = localParts(b.start_at);
   return {
     id: "sq_" + b.id,
@@ -248,6 +249,26 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Square sync isn't configured yet — add the environment variables in Vercel." });
   }
 
+  /* ---- what is actually sitting in her calendar right now ---- */
+  if (req.method === "GET" && req.query.events) {
+    try {
+      const events = (await sbGet("events")) || [];
+      const sq = events.filter((e) => String(e.id || "").startsWith("sq_"));
+      const byDate = {};
+      for (const e of events) byDate[(e.date || "").slice(0, 7)] = (byDate[(e.date || "").slice(0, 7)] || 0) + 1;
+      return res.status(200).json({
+        supabase: (process.env.SUPABASE_URL || "").replace(/^https:\/\//, "").split(".")[0],
+        totalEvents: events.length,
+        fromSquare: sq.length,
+        byMonth: byDate,
+        newest: events.map((e) => e.date).sort().slice(-3),
+        sample: sq.slice(0, 3).map((e) => ({ id: e.id, date: e.date, time: e.time, type: e.type, title: e.title, who: e.clientName })),
+      });
+    } catch (e) {
+      return res.status(500).json({ error: "Could not read her calendar", detail: String(e) });
+    }
+  }
+
   /* ---- diagnostic: which parameter is Square unhappy with? ---- */
   if (req.method === "GET" && req.query.probe) {
     const loc = await resolveLocation();
@@ -324,8 +345,9 @@ export default async function handler(req, res) {
         let cursor = "";
 
         for (let page = 0; page < 10; page++) {
+          /* No location filter: she runs Velvet Glow and Pageant Perfect from
+             two different Square locations, and filtering to one loses the other. */
           const url = `${SQ}/bookings?limit=100` +
-            (loc.id ? `&location_id=${encodeURIComponent(loc.id)}` : "") +
             `&start_at_min=${rfc(new Date(windowStart))}&start_at_max=${rfc(new Date(windowEnd))}` +
             (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
           const r = await fetch(url, { headers: sqHeaders() });
@@ -358,7 +380,9 @@ export default async function handler(req, res) {
 
       const found = bookings.length;
       const evts = [];
-      for (const b of bookings) evts.push(await toEvent(b));
+      const locNames = {};
+      for (const l of (loc.list || [])) { if (l && l.id) locNames[l.id] = l.name || ""; }
+      for (const b of bookings) evts.push(await toEvent(b, locNames));
       const result = await upsertEvents(evts);
 
       let paid = 0, payErr = null;
@@ -378,8 +402,8 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         ok: true,
-        location: loc.id || "(all locations)",
-        locationSource: loc.source,
+        locations: (loc.list || []).length ? loc.list : loc.id,
+        covering: "all locations",
         locationNote: loc.source === "env-was-wrong"
           ? `SQUARE_LOCATION_ID in Vercel (${loc.ignored}) is not a location on this account — ignored. Remove it, or set it to ${loc.id}.`
           : undefined,
