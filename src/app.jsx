@@ -378,14 +378,7 @@ html { scroll-behavior: smooth; }
   -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent);
   mask-image: linear-gradient(90deg, #000 92%, transparent); }
 .hq-ticker-track { display: inline-flex; align-items: center; gap: 30px; white-space: nowrap;
-  will-change: transform; -webkit-backface-visibility: hidden; backface-visibility: hidden;
-  animation-name: hqTick; animation-timing-function: linear; animation-iteration-count: infinite;
-  animation-duration: 34s; }
-@keyframes hqTick {
-  from { -webkit-transform: translate3d(0, 0, 0); transform: translate3d(0, 0, 0); }
-  to { -webkit-transform: translate3d(-50%, 0, 0); transform: translate3d(-50%, 0, 0); }
-}
-@media (prefers-reduced-motion: reduce) { .hq-ticker-track { animation: none; } .hq-ticker { mask-image: none; -webkit-mask-image: none; } }
+  will-change: transform; -webkit-backface-visibility: hidden; backface-visibility: hidden; }
 
 /* the bit that has to shout */
 .hq-live { position: relative; display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px 2px 7px; border-radius: 999px;
@@ -567,6 +560,11 @@ const downloadICS = (filename, events) =>
 
 const csvCell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
 const exportBooksCSV = (receipts, income, mileage, rate, directing) => {
+  /* her page for this brand, if she has given one */
+  const social = isVG
+    ? (settings.vgInstagram ? { url: settings.vgInstagram, label: "FOLLOW VELVET GLOW ON INSTAGRAM" } : null)
+    : (settings.ppFacebook ? { url: settings.ppFacebook, label: "FOLLOW PAGEANT PERFECT ON FACEBOOK" } : null);
+
   const rows = [["Type", "Business", "Date", "Description", "Category", "Amount", "Deductible", "Notes"]];
   receipts.forEach((r) => rows.push(["Expense", r.biz, r.date, r.vendor, r.category, (r.amount || 0).toFixed(2), r.deductible, r.note]));
   income.forEach((i) => rows.push(["Income", i.biz, i.date, i.source, i.method || "", (i.amount || 0).toFixed(2), "", i.notes || ""]));
@@ -1020,15 +1018,19 @@ export default function PaigeHQ() {
           fontFamily: B.display, userSelect: "none",
         }}>{B.mark}</div>
         <div style={{ maxWidth: 560, margin: "0 auto", position: "relative" }}>
-          {(brandKey === "pp" || brandKey === "vg") && (
-            <div style={{ height: brandKey === "vg" ? 74 : 118, display: "grid", placeItems: "center", marginBottom: 10 }}>
-              <img src={brandKey === "pp" ? PP_LOGO : VG_LOGO} alt={B.name}
-                style={{ maxHeight: "100%", maxWidth: "82%", width: "auto", height: "auto",
-                  objectFit: "contain", display: "block", borderRadius: 6 }} />
-            </div>
+          {(brandKey === "pp" || brandKey === "vg") ? (
+            <img src={brandKey === "pp" ? PP_LOGO : VG_LOGO} alt={B.name}
+              style={{
+                display: "block", margin: "0 auto", borderRadius: 6,
+                height: brandKey === "vg" ? 64 : 116, width: "auto",
+                maxWidth: brandKey === "vg" ? 280 : 150,
+              }} />
+          ) : (
+            <>
+              <div style={{ fontFamily: B.display, fontSize: B.name.length > 15 ? 20 : 27, fontWeight: 600, letterSpacing: brandKey === "vg" ? 6 : 3, color: B.c.soft, lineHeight: 1.15 }}>{B.name}</div>
+              {B.sub && <div style={{ fontFamily: B.display, fontStyle: brandKey === "pp" ? "italic" : "normal", fontSize: brandKey === "re" ? 12 : 15, letterSpacing: brandKey === "re" ? 2 : 0, color: B.c.gold, marginTop: 4 }}>{B.sub}</div>}
+            </>
           )}
-          <div style={{ fontFamily: B.display, fontSize: B.name.length > 15 ? 20 : 27, fontWeight: 600, letterSpacing: brandKey === "vg" ? 6 : 3, color: B.c.soft, lineHeight: 1.15 }}>{B.name}</div>
-          {B.sub && <div style={{ fontFamily: B.display, fontStyle: brandKey === "pp" ? "italic" : "normal", fontSize: brandKey === "re" ? 12 : 15, letterSpacing: brandKey === "re" ? 2 : 0, color: B.c.gold, marginTop: 4 }}>{B.sub}</div>}
           <hr className="lux-rule" style={{ width: 130, margin: "10px auto 8px", "--metal-mid": B.c.gold }} />
           <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 3.5, color: B.c.gold, opacity: 0.85 }}>{B.byline}</div>
         </div>
@@ -1553,6 +1555,39 @@ function NewsTicker({ hub, alerts = [], gallery = [], reviews = [], pageants = [
   pageants.filter((p) => p.date >= today && within(p.date, 45)).slice(0, 2).forEach((p) =>
     items.push({ key: "p" + p.id, node: <><span style={{ color: LUXE.champagne }}>♛</span><span>{p.name} coming up</span></>, go: "pp" }));
 
+  /* CSS marquees get switched off by Low Power Mode and Reduce Motion on iOS,
+     so the scroll is driven here instead. */
+  const trackRef = useRef(null);
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    let x = 0, last = 0, frame = 0, half = 0;
+    const measure = () => { half = el.scrollWidth / 2; };
+    measure();
+    const speed = 34;                       /* pixels a second */
+    const step = (now) => {
+      if (!last) last = now;
+      const dt = Math.min((now - last) / 1000, 0.1);
+      last = now;
+      if (!half) measure();
+      if (half) {
+        x -= speed * dt;
+        if (x <= -half) x += half;
+        el.style.transform = `translate3d(${x}px, 0, 0)`;
+      }
+      frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    const onVis = () => { last = 0; };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("resize", measure);
+    };
+  }, [items.length]);
+
   if (items.length === 0) return null;
 
   /* two copies so the loop has no seam */
@@ -1584,7 +1619,7 @@ function NewsTicker({ hub, alerts = [], gallery = [], reviews = [], pageants = [
           {owner ? "LIVE" : "NEW"}
         </span>
         <div className="hq-ticker" style={{ flex: 1, minWidth: 0 }}>
-        <div className="hq-ticker-track" style={{ animationDuration: `${Math.max(26, items.length * 13)}s` }}>
+        <div className="hq-ticker-track" ref={trackRef}>
           {run}
         </div>
         </div>
@@ -2503,6 +2538,11 @@ function MessageSheet({ B, clients = [], settings = {}, onClose }) {
 
 function ProfileSheet({ B, settings = {}, saveSettings, onClose, onSettings, onBackup, onClientView, onLock }) {
   const theme = settings.portalTheme || "blush";
+  /* her page for this brand, if she has given one */
+  const social = isVG
+    ? (settings.vgInstagram ? { url: settings.vgInstagram, label: "FOLLOW VELVET GLOW ON INSTAGRAM" } : null)
+    : (settings.ppFacebook ? { url: settings.ppFacebook, label: "FOLLOW PAGEANT PERFECT ON FACEBOOK" } : null);
+
   const rows = [
     ["Settings", "prices, content, connections", "calendar", onSettings],
     ["Back up now", "download everything to this phone", "check", onBackup],
@@ -3047,7 +3087,12 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
       {lookAt && (() => {
         const { r, d } = lookAt;
         const ph = String(r.phone || "").replace(/\D/g, "").slice(-10);
-        const rows = [
+        /* her page for this brand, if she has given one */
+  const social = isVG
+    ? (settings.vgInstagram ? { url: settings.vgInstagram, label: "FOLLOW VELVET GLOW ON INSTAGRAM" } : null)
+    : (settings.ppFacebook ? { url: settings.ppFacebook, label: "FOLLOW PAGEANT PERFECT ON FACEBOOK" } : null);
+
+  const rows = [
           ["Phone", r.phone],
           ["Email", d.email],
           ["Coming for", r.brand === "VG" ? "Velvet Glow — a tan" : "Pageant Perfect — coaching"],
@@ -3248,19 +3293,21 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
                 boxShadow: "0 3px 12px rgba(0,0,0,.36)" }}>
               <div style={{ textAlign: "center", padding: "10px 10px 0" }}>
                 <div style={{
-                  height: 132, borderRadius: 9, overflow: "hidden", display: "grid", placeItems: "center",
-                  background: c.plate, border: `1px solid ${c.frame}`, padding: 9,
+                  height: 142, borderRadius: 9, overflow: "hidden",
+                  background: c.plate, border: `1px solid ${c.frame}`, padding: 8,
                   boxShadow: "inset 0 1px 0 rgba(255,255,255,.06)",
                 }}>
                   {c.logo
                     ? <img src={c.logo} alt={c.title.replace("\n", " ")}
-                        style={{ maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto",
-                          objectFit: "contain", display: "block" }} />
+                        style={{ width: "100%", height: "100%", objectFit: "contain",
+                          objectPosition: "center", display: "block" }} />
                     : (
-                      <div>
-                        <div style={{ fontSize: 22, color: c.ink, lineHeight: 1 }}>{c.mark}</div>
-                        <div style={{ fontFamily: c.disp, fontSize: 18, fontWeight: 600, letterSpacing: c.track, color: "#FFFFFF",
-                          marginTop: 8, lineHeight: 1.2, whiteSpace: "pre-line" }}>{c.title}</div>
+                      <div style={{ height: "100%", display: "grid", placeItems: "center" }}>
+                        <div>
+                          <div style={{ fontSize: 22, color: c.ink, lineHeight: 1 }}>{c.mark}</div>
+                          <div style={{ fontFamily: c.disp, fontSize: 18, fontWeight: 600, letterSpacing: c.track, color: "#FFFFFF",
+                            marginTop: 8, lineHeight: 1.2, whiteSpace: "pre-line" }}>{c.title}</div>
+                        </div>
                       </div>
                     )}
                 </div>
@@ -3278,11 +3325,11 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
           style={{ width: "100%", display: "block", border: "none", cursor: "pointer", padding: 0, marginTop: 9,
             borderRadius: 11, overflow: "hidden", background: "linear-gradient(165deg, #06070A 12%, #101A1E 100%)",
             boxShadow: "0 3px 12px rgba(0,0,0,.36)" }}>
-          <div style={{ margin: "11px 11px 0", height: 132, borderRadius: 9, overflow: "hidden", display: "grid", placeItems: "center",
-            background: "#06070A", border: "1px solid rgba(110,193,214,.26)", padding: 9,
+          <div style={{ margin: "11px 11px 0", height: 212, borderRadius: 9, overflow: "hidden",
+            background: "#06070A", border: "1px solid rgba(110,193,214,.26)", padding: 10,
             boxShadow: "inset 0 1px 0 rgba(255,255,255,.06)" }}>
             <img src={MKQ_LOGO} alt="Miss Kentucky's Queen"
-              style={{ maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto", objectFit: "contain", display: "block" }} />
+              style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center", display: "block" }} />
           </div>
           {settings.mkqOpen && (
             <div style={{ marginTop: 9 }}>
@@ -3433,6 +3480,8 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
   const [exporting, setExporting] = useState(false);
   const [siteCopied, setSiteCopied] = useState(false);
   const [sqBusy, setSqBusy] = useState(false);
+  const [sqAllBusy, setSqAllBusy] = useState(false);
+  const [sqAllMsg, setSqAllMsg] = useState("");
   const [sqMsg, setSqMsg] = useState("");
   const [calCopied, setCalCopied] = useState(false);
   const [pushState, setPushState] = useState("off");
@@ -3732,7 +3781,39 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
         </div>
         {feedMsg && <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.5, color: B.c.accent, marginTop: 7 }}>{feedMsg}</div>}
 
-        <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 2, color: B.c.accent, fontWeight: 700, margin: "16px 0 6px" }}>3 · STOP CLIENTS BOOKING OVER IT</div>
+        <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 2, color: B.c.accent, fontWeight: 700, margin: "16px 0 6px" }}>3 · BRING IN EVERYTHING ALREADY BOOKED</div>
+        <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 10px", lineHeight: 1.6 }}>
+          The square icon on Today keeps you current. This one is for the first time \u2014 it walks a year either side and
+          brings over every lesson and tan already on your Square calendar, plus a year of payments.
+        </p>
+        {sqAllMsg && (
+          <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.4, color: B.c.accent, marginBottom: 9, lineHeight: 1.8 }}>{sqAllMsg}</div>
+        )}
+        <button onClick={async () => {
+            if (sqAllBusy) return;
+            setSqAllBusy(true); setSqAllMsg("READING YOUR SQUARE CALENDAR\u2026");
+            try {
+              const r = await fetch("/api/square?sync=1&all=1");
+              const j = await r.json();
+              if (!j.ok) setSqAllMsg(String(j.error || "Square said no").toUpperCase());
+              else {
+                setSqAllMsg(`${j.found} FOUND \u00b7 ${j.added} ADDED \u00b7 ${j.updated} UPDATED \u00b7 ${j.paid} PAYMENTS`);
+                toast(j.added ? `${j.added} appointments brought over` : "Already up to date");
+              }
+            } catch {
+              setSqAllMsg("COULD NOT REACH SQUARE \u2014 CHECK THE SERVER FILES ARE UPLOADED");
+            }
+            setSqAllBusy(false);
+          }}
+          disabled={sqAllBusy}
+          className="hq-mono hq-press"
+          style={{ width: "100%", padding: "13px 0", borderRadius: 7, border: "none", marginBottom: 4,
+            cursor: sqAllBusy ? "default" : "pointer",
+            background: sqAllBusy ? "#CBC2B4" : B.c.metal, color: B.c.deep, fontSize: 9.5, letterSpacing: 2, fontWeight: 700 }}>
+          {sqAllBusy ? "WORKING\u2026" : "IMPORT EVERY SQUARE APPOINTMENT"}
+        </button>
+
+        <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 2, color: B.c.accent, fontWeight: 700, margin: "16px 0 6px" }}>4 \u00b7 STOP CLIENTS BOOKING OVER IT</div>
         <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 10px", lineHeight: 1.6 }}>
           Square decides when you're bookable, so block those same hours there and clients simply won't see them offered.
         </p>
@@ -3745,12 +3826,18 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       </div>
 
       {/* Socials */}
-      <SettingHead B={B} note="Shown as buttons on your client home page. Leave blank to hide.">Social Links</SettingHead>
+      <SettingHead B={B} note="Each one shows as a follow button on that brand\u2019s page. Leave any blank to hide it.">Social Links</SettingHead>
       <div style={{ ...panelStyle(B) }}>
-        {[["facebook", "Facebook page"], ["instagram", "Instagram"]].map(([k, lab]) => (
+        {[
+          ["ppFacebook", "\u265B Pageant Perfect \u2014 Facebook"],
+          ["vgInstagram", "\u2726 Velvet Glow \u2014 Instagram"],
+          ["mkqFacebook", "\u265B Miss Kentucky's Queen \u2014 Facebook"],
+          ["facebook", "Your own Facebook (home page)"],
+          ["instagram", "Your own Instagram (home page)"],
+        ].map(([k, lab]) => (
           <div key={k} style={{ marginBottom: 9 }}>
             <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.5, color: B.c.faint, marginBottom: 4 }}>{lab.toUpperCase()}</div>
-            <input style={{ ...input, fontSize: 12.5 }} placeholder={k === "facebook" ? "https://facebook.com/..." : "https://instagram.com/..."}
+            <input style={{ ...input, fontSize: 12.5 }} placeholder={k.toLowerCase().includes("insta") ? "https://instagram.com/..." : "https://facebook.com/..."}
               defaultValue={settings[k] || ""}
               onBlur={(e) => { saveSettings({ ...settings, [k]: e.target.value.trim() }); toast("Saved"); }} />
           </div>
@@ -3850,14 +3937,39 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
           Adds the five she named, without dates. Open Calendar &rarr; Pageants to set each date and add her girls.
         </p>
         <button onClick={async () => {
-            const season = ["Mrs. America 2026", "Royalty USA 2026", "Miss Kentucky's Queen 2026",
-                            "Teen Miss Kentucky County Fair 2026", "Miss Kentucky Festivals 2026"];
-            const have = new Set((pageants || []).map((p) => String(p.name || "").toLowerCase()));
-            const add = season.filter((n) => !have.has(n.toLowerCase()))
-              .map((n, i) => ({ id: "sea" + Date.now() + i, name: n, date: "", location: "", system: "", girls: [] }));
-            if (!add.length) { toast("All five are already there"); return; }
-            await savePageants([...add, ...(pageants || [])]);
-            toast(`${add.length} added — set their dates in Calendar`);
+            /* real dates, so they land on the calendar and on the client site */
+            const season = [
+              { name: "Mrs. America 2026",                 date: "2026-09-01", endDate: "2026-09-03" },
+              { name: "Royalty USA 2026",                  date: "2026-09-24", endDate: "2026-09-27" },
+              { name: "Miss Kentucky's Queen 2026",        date: "2026-10-03", endDate: "" },
+              { name: "Teen Miss Kentucky County Fair 2026", date: "",         endDate: "" },
+              { name: "Miss Kentucky Festivals 2026",      date: "2026-11-20", endDate: "2026-11-22" },
+            ];
+            const key = (n) => String(n || "").trim().toLowerCase();
+            const existing = pageants || [];
+            let next = [...existing];
+            let added = 0, dated = 0;
+
+            for (const s of season) {
+              const found = next.find((p) => key(p.name) === key(s.name));
+              if (found) {
+                /* already there but blank — fill the date in rather than skipping */
+                if (!found.date && s.date) {
+                  next = next.map((p) => p.id !== found.id ? p : { ...p, date: s.date, endDate: s.endDate || "" });
+                  dated++;
+                }
+              } else {
+                next = [{ id: "sea" + Date.now() + added, name: s.name, date: s.date, endDate: s.endDate || "",
+                          location: "", system: "", girls: [] }, ...next];
+                added++;
+              }
+            }
+
+            if (!added && !dated) { toast("Already up to date"); return; }
+            await savePageants(next);
+            toast(added && dated ? `${added} added, ${dated} dated`
+                  : added ? `${added} added to your calendar`
+                  : `${dated} dates filled in`);
           }}
           className="hq-mono hq-press"
           style={{ width: "100%", padding: "13px 0", borderRadius: 7, border: "none", cursor: "pointer",
@@ -3979,8 +4091,8 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
           return id;
         };
         const addGlow = async (beforeFile, afterFile, caption, shade, who, publicOk) => {
-          const beforeId = await put(beforeFile);
-          const afterId = await put(afterFile);
+          const beforeId = beforeFile ? await put(beforeFile) : "";
+          const afterId = afterFile ? await put(afterFile) : "";
           await saveGallery([{ id: "gl" + Date.now(), kind: "glow", beforeId, afterId, caption, shade,
             client: who || "", pub: publicOk !== false, date: new Date().toISOString().slice(0, 10) }, ...gallery]);
         };
@@ -4265,8 +4377,13 @@ function GlowUploader({ B, onAdd, clients = [] }) {
   const ready = after && !busy;
   const go = async () => {
     setBusy(true);
-    try { await onAdd(before, after, caption.trim(), shade.trim(), who, pub); setBefore(null); setAfter(null); setCaption(""); setShade(""); setWho(""); setPub(true); }
-    finally { setBusy(false); }
+    try {
+      await onAdd(before, after, caption.trim(), shade.trim(), who, pub);
+      setBefore(null); setAfter(null); setCaption(""); setShade(""); setWho(""); setPub(true);
+      toast("Added to the gallery");
+    } catch (e) {
+      toast("That photo would not save — try another", "bad");
+    } finally { setBusy(false); }
   };
   const slot = (label, file, setFile) => (
     <label style={{ flex: 1, cursor: "pointer" }}>
@@ -4318,8 +4435,13 @@ function WinUploader({ B, onAdd }) {
   const ready = photo && name.trim() && title.trim() && !busy;
   const go = async () => {
     setBusy(true);
-    try { await onAdd(photo, name.trim(), title.trim(), date); setPhoto(null); setName(""); setTitle(""); setDate(""); }
-    finally { setBusy(false); }
+    try {
+      await onAdd(photo, name.trim(), title.trim(), date);
+      setPhoto(null); setName(""); setTitle(""); setDate("");
+      toast("Added to the wall of fame");
+    } catch (e) {
+      toast("That photo would not save — try another", "bad");
+    } finally { setBusy(false); }
   };
   return (
     <>
@@ -4600,6 +4722,11 @@ function StudioTab({ B, services, hours, reviews = [], saveReviews, gallery = []
   const prices = svcList.map((s2) => parseFloat(String(s2.price).replace(/[^0-9.]/g, ""))).filter((n) => n > 0);
   const from = prices.length ? `From $${Math.min(...prices)}` : "";
 
+  /* her page for this brand, if she has given one */
+  const social = isVG
+    ? (settings.vgInstagram ? { url: settings.vgInstagram, label: "FOLLOW VELVET GLOW ON INSTAGRAM" } : null)
+    : (settings.ppFacebook ? { url: settings.ppFacebook, label: "FOLLOW PAGEANT PERFECT ON FACEBOOK" } : null);
+
   const rows = [
     { key: "book", label: isVG ? "Book a Glow" : "Book a Lesson", sub: from ? `${from} · services & times on the next screen` : "Straight into Paige's calendar", href: B.bookBase, primary: true, emblem: B.mark },
     isVG
@@ -4635,11 +4762,7 @@ function StudioTab({ B, services, hours, reviews = [], saveReviews, gallery = []
             background: `linear-gradient(160deg, ${B.c.deep} 15%, ${B.c.deep2} 100%)`,
             boxShadow: "0 8px 28px rgba(20,15,10,.28)",
           }}>
-          <div style={{ height: isVG ? 78 : 128, display: "grid", placeItems: "center", marginBottom: 12 }}>
-            <img src={isVG ? VG_LOGO : PP_LOGO} alt={B.name}
-              style={{ maxHeight: "100%", maxWidth: "78%", width: "auto", height: "auto",
-                objectFit: "contain", display: "block", borderRadius: 6 }} />
-          </div>
+          <div style={{ fontSize: 26, color: B.c.gold, lineHeight: 1, marginBottom: 8 }}>{B.mark}</div>
           <div style={{ fontFamily: B.display, fontSize: 30, fontWeight: 600, letterSpacing: 1, color: "#FBF8F3", lineHeight: 1.1 }}>
             {isVG ? "Book a Glow" : "Book a Lesson"}
           </div>
@@ -4730,7 +4853,7 @@ function StudioTab({ B, services, hours, reviews = [], saveReviews, gallery = []
                   </span>
                 </div>
                 <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 1.5, color: B.c.faint, marginTop: 5 }}>
-                  {new Date(p.date + "T12:00").toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric" }).toUpperCase()}
+                  {pageantWhen(p.date, p.endDate).toUpperCase()}
                   {p.location ? ` · ${p.location.toUpperCase()}` : ""}
                 </div>
                 {p.system && <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.5, color: B.c.faint, marginTop: 3, opacity: 0.8 }}>{p.system.toUpperCase()}</div>}
@@ -4742,6 +4865,13 @@ function StudioTab({ B, services, hours, reviews = [], saveReviews, gallery = []
 
       {section === "mkq" && <MkqPublic B={BRANDS.mkq} settings={settings} />}
       {section === "gallery" && <GalleryPage B={B} lock={B.key} />}
+      {!section && social && (
+        <a href={social.url} target="_blank" rel="noreferrer" className="hq-mono hq-press"
+          style={{ display: "block", padding: "13px 0", marginTop: 10, borderRadius: 9, textAlign: "center", textDecoration: "none",
+            border: `1px solid ${B.c.accent}`, color: B.c.accent, fontSize: 9, letterSpacing: 1.6, fontWeight: 700 }}>
+          {social.label}
+        </a>
+      )}
       {section === "reviews" && <ReviewsPage B={B} reviews={reviews} saveReviews={saveReviews} lock={code} googleUrl={googleUrl} />}
       {section === "care" && <CarePage B={B} lock={B.key} />}
     </div>
@@ -5402,6 +5532,18 @@ function PageantDetail({ B, pageant, onClose, onChange, onDelete }) {
   );
 }
 
+/* "September 1 – 3" for a run, or just the day */
+const pageantWhen = (date, endDate) => {
+  if (!date) return "";
+  const d = new Date(date + "T12:00");
+  const one = d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+  if (!endDate || endDate === date) return one;
+  const e = new Date(endDate + "T12:00");
+  return e.getMonth() === d.getMonth()
+    ? `${one} \u2013 ${e.getDate()}`
+    : `${one} \u2013 ${e.toLocaleDateString("en-US", { month: "long", day: "numeric" })}`;
+};
+
 /* ================= MKQ PUBLIC (client-facing) ================= */
 function MkqPublic({ B, settings = {} }) {
   const cd = useMkqCountdown();
@@ -5447,7 +5589,10 @@ function MkqPublic({ B, settings = {} }) {
     <div className="hq-fade">
       {/* the lockup */}
       <div style={{ background: `linear-gradient(170deg, ${INK} 10%, #101A1E 100%)`, borderRadius: 12, padding: "18px 16px 16px", marginBottom: 12, textAlign: "center", boxShadow: "0 4px 18px rgba(0,0,0,.34)" }}>
-        <img src={MKQ_LOGO} alt="Miss Kentucky's Queen" style={{ width: "86%", maxWidth: 320, display: "block", margin: "0 auto" }} />
+        <div style={{ height: 190 }}>
+          <img src={MKQ_LOGO} alt="Miss Kentucky's Queen"
+            style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center", display: "block" }} />
+        </div>
         {open && (
           <div style={{ marginTop: 13 }}>
             <span className="hq-mono hq-live" style={{ fontSize: 10, padding: "6px 15px 6px 11px" }}>REGISTRATION NOW OPEN</span>
@@ -6509,7 +6654,12 @@ function IncomeTrends({ B, income, index = [], mileage = [], settings = {} }) {
   const letters = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
 
   const PeriodCard = ({ label, pred }) => {
-    const rows = [["♛ Pageant Perfect", sumBy(pred, "PP"), BRANDS.pp.c.accent], ["✦ Velvet Glow", sumBy(pred, "VG"), BRANDS.vg.c.accent], ["◈ Realty", sumBy(pred, "RE"), BRANDS.re.c.accent]];
+    /* her page for this brand, if she has given one */
+  const social = isVG
+    ? (settings.vgInstagram ? { url: settings.vgInstagram, label: "FOLLOW VELVET GLOW ON INSTAGRAM" } : null)
+    : (settings.ppFacebook ? { url: settings.ppFacebook, label: "FOLLOW PAGEANT PERFECT ON FACEBOOK" } : null);
+
+  const rows = [["♛ Pageant Perfect", sumBy(pred, "PP"), BRANDS.pp.c.accent], ["✦ Velvet Glow", sumBy(pred, "VG"), BRANDS.vg.c.accent], ["◈ Realty", sumBy(pred, "RE"), BRANDS.re.c.accent]];
     const total = rows.reduce((s, r) => s + r[1], 0);
     return (
       <div style={{ ...card, padding: "14px 16px", marginBottom: 12 }}>
