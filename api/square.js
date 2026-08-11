@@ -306,34 +306,50 @@ export default async function handler(req, res) {
       const start = new Date(Date.now() - backDays * 86400000);
       const end = new Date(Date.now() + fwdDays * 86400000);
 
-      /* Square pages at 200 — walk the whole list, not just the first page */
+      /* Square only allows 31 days per query, so walk the range in chunks
+         and page through each one. */
       const bookings = [];
-      let cursor = "";
-      for (let page = 0; page < 25; page++) {
-        const url = `${SQ}/bookings?limit=100` +
-          (loc.id ? `&location_id=${encodeURIComponent(loc.id)}` : "") +
-          `&start_at_min=${rfc(start)}&start_at_max=${rfc(end)}` +
-          (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
-        const r = await fetch(url, { headers: sqHeaders() });
-        const j = await r.json();
+      const seen = new Set();
+      const WINDOW = 30 * 86400000;
+      let windowStart = start.getTime();
+      let windows = 0;
+      const maxWindows = everything ? 26 : 9;
 
-        if (j.errors) {
-          return res.status(400).json({
-            error: j.errors[0]?.detail || "Square rejected the request",
-            code: j.errors[0]?.code || null,
-            field: j.errors[0]?.field || null,
-            allErrors: j.errors,                 /* whatever Square actually said */
-            triedUrl: url.replace(/access_token=[^&]*/, ""),
-            hint: /PERMISSION|FORBIDDEN|UNAUTHORIZED/i.test(j.errors[0]?.code || "")
-              ? "The token is missing a permission — it needs APPOINTMENTS_READ, CUSTOMERS_READ, ITEMS_READ and PAYMENTS_READ."
-              : null,
-            location: loc.id,
-          });
+      while (windowStart < end.getTime() && windows < maxWindows) {
+        const windowEnd = Math.min(windowStart + WINDOW, end.getTime());
+        let cursor = "";
+
+        for (let page = 0; page < 10; page++) {
+          const url = `${SQ}/bookings?limit=100` +
+            (loc.id ? `&location_id=${encodeURIComponent(loc.id)}` : "") +
+            `&start_at_min=${rfc(new Date(windowStart))}&start_at_max=${rfc(new Date(windowEnd))}` +
+            (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
+          const r = await fetch(url, { headers: sqHeaders() });
+          const j = await r.json();
+
+          if (j.errors) {
+            return res.status(400).json({
+              error: j.errors[0]?.detail || "Square rejected the request",
+              code: j.errors[0]?.code || null,
+              field: j.errors[0]?.field || null,
+              allErrors: j.errors,
+              triedUrl: url,
+              hint: /PERMISSION|FORBIDDEN|UNAUTHORIZED/i.test(j.errors[0]?.code || "")
+                ? "The token is missing a permission — it needs APPOINTMENTS_READ, CUSTOMERS_READ, ITEMS_READ and PAYMENTS_READ."
+                : null,
+              location: loc.id,
+            });
+          }
+
+          for (const b of j.bookings || []) {
+            if (!seen.has(b.id)) { seen.add(b.id); bookings.push(b); }
+          }
+          cursor = j.cursor || "";
+          if (!cursor) break;
         }
 
-        bookings.push(...(j.bookings || []));
-        cursor = j.cursor || "";
-        if (!cursor) break;
+        windowStart = windowEnd;
+        windows++;
       }
 
       const found = bookings.length;
@@ -367,7 +383,7 @@ export default async function handler(req, res) {
         paid,
         payErr,
         ...result,
-        window: `${backDays} days back, ${fwdDays} forward`,
+        window: `${backDays} days back, ${fwdDays} forward, in ${windows} chunks`,
         note: found === 0
           ? "Square returned no bookings in the next 60 days for this location. If you just made a test booking, check it's on this same location and in the future."
           : undefined,
