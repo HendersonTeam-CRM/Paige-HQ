@@ -52,6 +52,10 @@ async function sbPut(key, value) {
 const EASTERN = "America/New_York";
 
 /* Square wants RFC 3339 and is fussy about fractional seconds */
+/* Square sometimes answers with an empty errors array. [] is truthy in JS,
+   so check the length or a perfectly good response reads as a failure. */
+const failed = (j) => Array.isArray(j && j.errors) ? j.errors.length > 0 : !!(j && j.errors);
+
 const rfc = (d) => new Date(d).toISOString().replace(/\.\d{3}Z$/, "Z");
 
 function localParts(iso) {
@@ -198,7 +202,7 @@ async function resolveLocation() {
     const r = await fetch(`${SQ}/locations`, { headers: sqHeaders() });
     const j = await r.json();
     list = j.locations || [];
-    if (j.errors) return { id: "", source: "error", errors: j.errors };
+    if (failed(j)) return { id: "", source: "error", errors: j.errors };
   } catch (e) {
     return { id: "", source: "error", detail: String(e) };
   }
@@ -276,7 +280,7 @@ export default async function handler(req, res) {
         const url = `${SQ}/customers?limit=100&sort_field=CREATED_AT&sort_order=DESC` + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
         const r = await fetch(url, { headers: sqHeaders() });
         const j = await r.json();
-        if (j.errors) return res.status(400).json({ error: j.errors[0]?.detail || "Square rejected the request", code: j.errors[0]?.code });
+        if (failed(j)) return res.status(400).json({ error: j.errors[0]?.detail || "Square rejected the request", code: j.errors[0]?.code });
         for (const c of j.customers || []) {
           const name = [c.given_name, c.family_name].filter(Boolean).join(" ").trim() || c.company_name || "";
           const phone = String(c.phone_number || "").replace(/\D/g, "").slice(-10);
@@ -327,7 +331,7 @@ export default async function handler(req, res) {
           const r = await fetch(url, { headers: sqHeaders() });
           const j = await r.json();
 
-          if (j.errors) {
+          if (failed(j)) {
             return res.status(400).json({
               error: j.errors[0]?.detail || "Square rejected the request",
               code: j.errors[0]?.code || null,
@@ -365,7 +369,7 @@ export default async function handler(req, res) {
           const pr = await fetch(`${SQ}/payments?begin_time=${since}&limit=100&sort_order=DESC` +
             (pcur ? `&cursor=${encodeURIComponent(pcur)}` : ""), { headers: sqHeaders() });
           const pj = await pr.json();
-          if (pj.errors) { payErr = pj.errors[0]?.detail || null; break; }
+          if (failed(pj)) { payErr = pj.errors[0]?.detail || null; break; }
           for (const p of pj.payments || []) { if (await recordPayment(p)) paid++; }
           pcur = pj.cursor || "";
           if (!pcur) break;
