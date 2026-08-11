@@ -193,16 +193,28 @@ async function recordPayment(p) {
 /* ---------- which location? ---------- */
 async function resolveLocation() {
   const given = (process.env.SQUARE_LOCATION_ID || "").trim();
-  if (given) return { id: given, source: "env" };
+  let list = [];
   try {
     const r = await fetch(`${SQ}/locations`, { headers: sqHeaders() });
     const j = await r.json();
-    const list = j.locations || [];
-    const active = list.find((l) => l.status === "ACTIVE") || list[0];
-    return active ? { id: active.id, source: "auto", name: active.name } : { id: "", source: "none", errors: j.errors };
+    list = j.locations || [];
+    if (j.errors) return { id: "", source: "error", errors: j.errors };
   } catch (e) {
     return { id: "", source: "error", detail: String(e) };
   }
+
+  /* Only use the env value if this account actually has that location.
+     A stale or mistyped id makes Square reject the whole query. */
+  if (given && list.some((l) => l.id === given)) return { id: given, source: "env", list: list.map((l) => l.id) };
+
+  const active = list.find((l) => l.status === "ACTIVE") || list[0];
+  return {
+    id: active ? active.id : "",
+    source: given ? "env-was-wrong" : "auto",
+    name: active ? active.name : "",
+    ignored: given || undefined,
+    list: list.map((l) => ({ id: l.id, name: l.name, status: l.status })),
+  };
 }
 
 /* ---------- signature check ---------- */
@@ -285,12 +297,6 @@ export default async function handler(req, res) {
   if (req.method === "GET") {
     try {
       const loc = await resolveLocation();
-      if (!loc.id) {
-        return res.status(400).json({
-          error: "Couldn't find a Square location — check the access token is a PRODUCTION token.",
-          detail: loc.errors || loc.detail || null,
-        });
-      }
 
       /* Normally: a bit of history and a season ahead.
          ?all=1 : everything Square has, a year either side, for a first import. */
@@ -304,7 +310,8 @@ export default async function handler(req, res) {
       const bookings = [];
       let cursor = "";
       for (let page = 0; page < 25; page++) {
-        const url = `${SQ}/bookings?limit=100&location_id=${encodeURIComponent(loc.id)}` +
+        const url = `${SQ}/bookings?limit=100` +
+          (loc.id ? `&location_id=${encodeURIComponent(loc.id)}` : "") +
           `&start_at_min=${rfc(start)}&start_at_max=${rfc(end)}` +
           (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
         const r = await fetch(url, { headers: sqHeaders() });
@@ -351,8 +358,11 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         ok: true,
-        location: loc.id,
+        location: loc.id || "(all locations)",
         locationSource: loc.source,
+        locationNote: loc.source === "env-was-wrong"
+          ? `SQUARE_LOCATION_ID in Vercel (${loc.ignored}) is not a location on this account — ignored. Remove it, or set it to ${loc.id}.`
+          : undefined,
         found,
         paid,
         payErr,
