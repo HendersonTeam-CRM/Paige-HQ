@@ -51,6 +51,9 @@ async function sbPut(key, value) {
 /* ---------- shaping a Square booking into one of her events ---------- */
 const EASTERN = "America/New_York";
 
+/* Square wants RFC 3339 and is fussy about fractional seconds */
+const rfc = (d) => new Date(d).toISOString().replace(/\.\d{3}Z$/, "Z");
+
 function localParts(iso) {
   const d = new Date(iso);
   const date = new Intl.DateTimeFormat("en-CA", { timeZone: EASTERN, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
@@ -229,6 +232,28 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Square sync isn't configured yet — add the environment variables in Vercel." });
   }
 
+  /* ---- diagnostic: which parameter is Square unhappy with? ---- */
+  if (req.method === "GET" && req.query.probe) {
+    const loc = await resolveLocation();
+    const now = new Date();
+    const tries = [
+      ["bare", `${SQ}/bookings?limit=100`],
+      ["with location", `${SQ}/bookings?limit=100&location_id=${encodeURIComponent(loc.id)}`],
+      ["with start_at_min (now)", `${SQ}/bookings?limit=100&location_id=${encodeURIComponent(loc.id)}&start_at_min=${rfc(now)}`],
+      ["with a past start_at_min", `${SQ}/bookings?limit=100&location_id=${encodeURIComponent(loc.id)}&start_at_min=${rfc(new Date(Date.now() - 45 * 86400000))}`],
+      ["with both ends", `${SQ}/bookings?limit=100&location_id=${encodeURIComponent(loc.id)}&start_at_min=${rfc(now)}&start_at_max=${rfc(new Date(Date.now() + 180 * 86400000))}`],
+    ];
+    const out = [];
+    for (const [label, url] of tries) {
+      try {
+        const r = await fetch(url, { headers: sqHeaders() });
+        const j = await r.json();
+        out.push({ label, status: r.status, bookings: (j.bookings || []).length, errors: j.errors || null });
+      } catch (e) { out.push({ label, crashed: String(e) }); }
+    }
+    return res.status(200).json({ location: loc.id, locationSource: loc.source, tries: out });
+  }
+
   /* ---- her customer list, for the one-off import ---- */
   if (req.method === "GET" && req.query.customers) {
     try {
@@ -267,36 +292,61 @@ export default async function handler(req, res) {
         });
       }
 
-      const start = new Date();
-      const end = new Date(Date.now() + 60 * 86400000);
-      const url = `${SQ}/bookings?limit=200&location_id=${encodeURIComponent(loc.id)}` +
-        `&start_at_min=${start.toISOString()}&start_at_max=${end.toISOString()}`;
-      const r = await fetch(url, { headers: sqHeaders() });
-      const j = await r.json();
+      /* Normally: a bit of history and a season ahead.
+         ?all=1 : everything Square has, a year either side, for a first import. */
+      const everything = !!req.query.all;
+      const backDays = everything ? 365 : 45;
+      const fwdDays = everything ? 365 : 180;
+      const start = new Date(Date.now() - backDays * 86400000);
+      const end = new Date(Date.now() + fwdDays * 86400000);
 
-      if (j.errors) {
-        return res.status(400).json({
-          error: j.errors[0]?.detail || "Square rejected the request",
-          code: j.errors[0]?.code || null,
-          hint: /PERMISSION|FORBIDDEN|UNAUTHORIZED/i.test(j.errors[0]?.code || "")
-            ? "The token is missing a permission — it needs APPOINTMENTS_READ, CUSTOMERS_READ, ITEMS_READ and PAYMENTS_READ."
-            : null,
-          location: loc.id,
-        });
+      /* Square pages at 200 — walk the whole list, not just the first page */
+      const bookings = [];
+      let cursor = "";
+      for (let page = 0; page < 25; page++) {
+        const url = `${SQ}/bookings?limit=100&location_id=${encodeURIComponent(loc.id)}` +
+          `&start_at_min=${rfc(start)}&start_at_max=${rfc(end)}` +
+          (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
+        const r = await fetch(url, { headers: sqHeaders() });
+        const j = await r.json();
+
+        if (j.errors) {
+          return res.status(400).json({
+            error: j.errors[0]?.detail || "Square rejected the request",
+            code: j.errors[0]?.code || null,
+            field: j.errors[0]?.field || null,
+            allErrors: j.errors,                 /* whatever Square actually said */
+            triedUrl: url.replace(/access_token=[^&]*/, ""),
+            hint: /PERMISSION|FORBIDDEN|UNAUTHORIZED/i.test(j.errors[0]?.code || "")
+              ? "The token is missing a permission — it needs APPOINTMENTS_READ, CUSTOMERS_READ, ITEMS_READ and PAYMENTS_READ."
+              : null,
+            location: loc.id,
+          });
+        }
+
+        bookings.push(...(j.bookings || []));
+        cursor = j.cursor || "";
+        if (!cursor) break;
       }
 
-      const found = (j.bookings || []).length;
+      const found = bookings.length;
       const evts = [];
-      for (const b of j.bookings || []) evts.push(await toEvent(b));
+      for (const b of bookings) evts.push(await toEvent(b));
       const result = await upsertEvents(evts);
 
       let paid = 0, payErr = null;
       try {
-        const since = new Date(Date.now() - 30 * 86400000).toISOString();
-        const pr = await fetch(`${SQ}/payments?begin_time=${since}&limit=100&sort_order=DESC`, { headers: sqHeaders() });
-        const pj = await pr.json();
-        if (pj.errors) payErr = pj.errors[0]?.detail || null;
-        for (const p of pj.payments || []) { if (await recordPayment(p)) paid++; }
+        const since = rfc(new Date(Date.now() - (everything ? 365 : 30) * 86400000));
+        let pcur = "";
+        for (let page = 0; page < (everything ? 20 : 2); page++) {
+          const pr = await fetch(`${SQ}/payments?begin_time=${since}&limit=100&sort_order=DESC` +
+            (pcur ? `&cursor=${encodeURIComponent(pcur)}` : ""), { headers: sqHeaders() });
+          const pj = await pr.json();
+          if (pj.errors) { payErr = pj.errors[0]?.detail || null; break; }
+          for (const p of pj.payments || []) { if (await recordPayment(p)) paid++; }
+          pcur = pj.cursor || "";
+          if (!pcur) break;
+        }
       } catch (e) { payErr = String(e); }
 
       return res.status(200).json({
@@ -307,6 +357,7 @@ export default async function handler(req, res) {
         paid,
         payErr,
         ...result,
+        window: `${backDays} days back, ${fwdDays} forward`,
         note: found === 0
           ? "Square returned no bookings in the next 60 days for this location. If you just made a test booking, check it's on this same location and in the future."
           : undefined,
