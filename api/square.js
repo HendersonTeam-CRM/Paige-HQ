@@ -252,6 +252,41 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Square sync isn't configured yet — add the environment variables in Vercel." });
   }
 
+  /* ---- is she taking money through Square at all? ---- */
+  if (req.method === "GET" && req.query.payprobe) {
+    const out = [];
+    const spans = [["30 days", 30], ["1 year", 365], ["3 years", 1095]];
+    for (const [label, days] of spans) {
+      try {
+        const since = rfc(new Date(Date.now() - days * 86400000));
+        const r = await fetch(`${SQ}/payments?begin_time=${since}&limit=100&sort_order=DESC`, { headers: sqHeaders() });
+        const j = await r.json();
+        out.push({
+          label, status: r.status,
+          payments: (j.payments || []).length,
+          errors: (j.errors || []).map((e) => ({ code: e.code, detail: e.detail })),
+          newest: (j.payments || [])[0]
+            ? { at: j.payments[0].created_at, amount: (j.payments[0].amount_money?.amount || 0) / 100, status: j.payments[0].status }
+            : null,
+        });
+      } catch (e) { out.push({ label, crashed: String(e) }); }
+    }
+    /* orders show what she charged even when the money moved elsewhere */
+    let orders = null;
+    try {
+      const loc = await resolveLocation();
+      const r = await fetch(`${SQ}/orders/search`, {
+        method: "POST", headers: sqHeaders(),
+        body: JSON.stringify({ location_ids: (loc.list || []).map((l) => l.id).filter(Boolean), limit: 20 }),
+      });
+      const j = await r.json();
+      orders = { status: r.status, count: (j.orders || []).length, errors: (j.errors || []).map((e) => e.code) };
+    } catch (e) { orders = { crashed: String(e) }; }
+
+    return res.status(200).json({ payments: out, orders,
+      readsPayments: out.every((o) => !o.errors || !o.errors.length) ? "token can read payments" : "token cannot read payments" });
+  }
+
   /* ---- write completed bookings into each client's visit history ---- */
   if (req.method === "GET" && req.query.history) {
     try {
