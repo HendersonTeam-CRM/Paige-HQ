@@ -8,10 +8,29 @@
     <meta name="apple-mobile-web-app-title" content="Paige HQ" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+    <link rel="manifest" href="/manifest.json" id="hq-manifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" id="hq-touch" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" id="hq-icon-192" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" id="hq-icon-512" />
+    <script>
+      /* Her portal wears the crown; the client site wears her headshot.
+         Both are served from the same file, so choose before iOS reads it. */
+      (function () {
+        try {
+          var h = location.hostname.toLowerCase();
+          var label = (h.split(".")[0] || "");
+          var owner = /^(hq|admin)\./.test(h) || label === "psh" || label === "paige-hq" ||
+            /(^|-)(owner|admin|hq)(-|$)/.test(label) || location.search.indexOf("hq=1") > -1;
+          if (owner) return;
+          document.getElementById("hq-touch").href = "/client-icon-180.png";
+          document.getElementById("hq-icon-192").href = "/client-icon-192.png";
+          document.getElementById("hq-icon-512").href = "/client-icon-512.png";
+          document.getElementById("hq-manifest").href = "/manifest-client.json";
+          var t = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+          if (t) t.content = "Paige";
+        } catch (e) {}
+      })();
+    </script>
     <title>Paige HQ — Pageant Coaching & Custom Tanning</title>
     <meta name="description" content="Book pageant lessons and custom airbrush tanning with Paige Swope Henderson in Lexington, Kentucky." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
