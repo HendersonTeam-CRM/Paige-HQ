@@ -574,10 +574,16 @@ const exportBooksCSV = (receipts, income, mileage, rate, directing) => {
     (d.income || []).forEach((i) => rows.push(["Directing income", d.name, i.date, i.desc, "", (i.amount || 0).toFixed(2), "", ""]));
     (d.expenses || []).forEach((x) => rows.push(["Directing expense", d.name, x.date, x.desc, "", (x.amount || 0).toFixed(2), "likely", ""]));
   });
-  downloadFile(`paige-books-${new Date().toISOString().slice(0, 10)}.csv`, rows.map((r) => r.map(csvCell).join(",")).join("\n"), "text/csv;charset=utf-8");
+  downloadFile(`paige-books-${ymd()}.csv`, rows.map((r) => r.map(csvCell).join(",")).join("\n"), "text/csv;charset=utf-8");
 };
 
 /* ================= SHARED UI ================= */
+/* Her day, not the server's. toISOString() is UTC, so after 8pm Eastern
+   it already reads as tomorrow and the schedule shifts a day. */
+const ymd = (d = new Date()) =>
+  new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+const daysFromNow = (n) => ymd(new Date(Date.now() + n * 86400000));
+
 const money = (n) => (typeof n === "number" && !isNaN(n) ? n.toLocaleString("en-US", { style: "currency", currency: "USD" }) : "$0.00");
 const badge = { likely: ["DEDUCTIBLE", "#4E6B4E"], possibly: ["REVIEW", "#8A6D3B"], unlikely: ["PERSONAL", "#8A4646"] };
 const Stamp = ({ level }) => {
@@ -693,7 +699,7 @@ export default function PaigeHQ() {
     const blob = new Blob([JSON.stringify({ app: "paige-hq", exportedAt: new Date().toISOString(), data }, null, 1)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `paige-hq-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `paige-hq-backup-${ymd()}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -810,7 +816,7 @@ export default function PaigeHQ() {
       await seed("clients", SAMPLE_CLIENTS, setClients);
       let ev = await loadJSON("events");
       if (ev === null) {
-        const todayStr = new Date().toISOString().slice(0, 10);
+        const todayStr = ymd();
         ev = [...SAMPLE_EVENTS,
           { id: "sdemo1", sample: true, type: "lesson", title: "Private Coaching · One Hour", clientName: "Harper Mills", date: todayStr, time: "18:00", durMin: 60, notes: "" },
           { id: "sdemo2", sample: true, type: "lesson", title: "Private Coaching · Half Hour", clientName: "Emmy Lou Tate", date: todayStr, time: "19:00", durMin: 30, notes: "" },
@@ -921,7 +927,7 @@ export default function PaigeHQ() {
               await saveIndex([{
                 id,
                 vendor: (read && read.vendor && read.vendor !== "Unknown") ? read.vendor : "",
-                date: (read && read.date) || new Date().toISOString().slice(0, 10),
+                date: (read && read.date) || ymd(),
                 amount: (read && Number(read.amount)) || 0,
                 category: (read && read.category) || "",
                 biz: code,
@@ -936,7 +942,7 @@ export default function PaigeHQ() {
               await saveJSON("gallery-img:" + id, b64);
               await saveGallery([{
                 id: "gp" + Date.now(), kind: "photo", brand: code, photoId: id,
-                caption, pub: true, date: new Date().toISOString().slice(0, 10),
+                caption, pub: true, date: ymd(),
               }, ...gallery]);
               toast("Added to the gallery");
             }
@@ -1359,7 +1365,7 @@ function WaiverForm({ B, client, onSigned, onSkip }) {
     setBusy(true);
     await onSigned({
       version: WAIVER_VERSION,
-      date: new Date().toISOString().slice(0, 10),
+      date: ymd(),
       signedName: name.trim(),
       guardian: guardian.trim(),
       photoOk: photo === "yes",
@@ -1504,14 +1510,14 @@ function InstallStrip({ hub }) {
    A single line that drifts across above the hero. It only exists
    when something has actually changed — no news, nothing renders. */
 function NewsTicker({ hub, alerts = [], gallery = [], reviews = [], pageants = [], settings = {}, onGo, owner }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = ymd();
   const within = (d, days) => {
     if (!d) return false;
     const diff = (new Date(today) - new Date(String(d).slice(0, 10))) / 86400000;
     return diff >= 0 && diff <= days;
   };
 
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = ymd();
   const live = alerts.filter((a) => !a.expires || a.expires >= todayISO);
 
   const items = [];
@@ -2482,7 +2488,9 @@ function MessageSheet({ B, clients = [], settings = {}, onClose }) {
   const { input } = useBrandBits(B);
   const [find, setFind] = useState("");
   const site = clientSite(settings);
-  const generic = `Here's my page — book a glow or a lesson, and your own appointments and notes live in there too: ${site}`;
+  /* Paige's own wording — she can edit it in Settings if she wants a different one. */
+  const invite = (settings.inviteText || `Hey there!\n\nIt's Paige with Pageant Perfect & Velvet Glow! I want to invite you to my brand new booking site, where everything is all under one link. Take a look and let me know what you think! Scheduling is OPEN \u{1F90D}`).trim();
+  const generic = `${invite}\n\n${site}`;
   const withPhones = clients.filter((c) => c.phone);
   const shown = find.trim()
     ? withPhones.filter((c) => (c.name || "").toLowerCase().includes(find.trim().toLowerCase()))
@@ -2519,7 +2527,7 @@ function MessageSheet({ B, clients = [], settings = {}, onClose }) {
           {shown.slice(0, 20).map((c) => {
             const ph = String(c.phone).replace(/\D/g, "").slice(-10);
             const first = String(c.name || "").split(" ")[0];
-            const body = `${first}, here's your own page with me — your appointments, your notes, and booking all in one spot. Save it to your phone: ${site}/?me=${ph}`;
+            const body = `Hey ${first}!\n\nIt's Paige with Pageant Perfect & Velvet Glow! Here's your own page with me — your appointments, your notes, and booking all under one link. Take a look and let me know what you think! Scheduling is OPEN \u{1F90D}\n\n${site}/?me=${ph}`;
             return (
               <a key={c.id} href={`sms:+1${ph}?&body=${encodeURIComponent(body)}`} onClick={onClose}
                 style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 2px", borderBottom: `1px solid ${B.c.line}`, textDecoration: "none" }}>
@@ -2689,8 +2697,8 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
     const [nick] = useState(() => HYPE_NAMES[Math.floor(Math.random() * HYPE_NAMES.length)]);
   const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
   const quote = QUOTES[dayOfYear % QUOTES.length];
-  const today = new Date().toISOString().slice(0, 10);
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const today = ymd();
+  const tomorrow = daysFromNow(1);
 
   const allItems = useMemo(() => [
     ...events.map((e) => ({ ...e, kind: "event" })),
@@ -2711,8 +2719,8 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
   const isPast = (e) => nowMins > toMin(e.time) + (e.durMin || 30);
   const upNext = todayList.find((e) => !isPast(e));
   const dow = new Date().getDay();
-  const weekStart = new Date(Date.now() - dow * 86400000).toISOString().slice(0, 10);
-  const weekEnd = new Date(Date.now() + (6 - dow) * 86400000).toISOString().slice(0, 10);
+  const weekStart = daysFromNow(-dow);
+  const weekEnd = daysFromNow(6 - dow);
   const inWeek = (i) => (i.date || "") >= weekStart && (i.date || "") <= weekEnd;
   const weekSum = (b) => income.filter((i) => i.biz === b && inWeek(i)).reduce((s, i) => s + (i.amount || 0), 0);
   const vgWeek = weekSum("VG"), ppWeek = weekSum("PP");
@@ -2759,7 +2767,7 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
       key: "bd" + c.id, mark: c.biz?.VG ? "✦" : "♛",
       label: `${c.name.split(" ")[0]}'s ${c.bigLabel || "big day"}`,
       days: daysUntil(c.bigDate),
-      booked: events.some((e) => (e.clientName || "").toLowerCase() === c.name.toLowerCase() && e.date >= new Date(new Date(c.bigDate + "T12:00").getTime() - 5 * 86400000).toISOString().slice(0, 10) && e.date <= c.bigDate),
+      booked: events.some((e) => (e.clientName || "").toLowerCase() === c.name.toLowerCase() && e.date >= ymd(new Date(new Date(c.bigDate + "T12:00").getTime() - 5 * 86400000)) && e.date <= c.bigDate),
       what: c.biz?.VG ? "GLOW" : "LESSON",
     })),
     ...pageants.filter((p) => p.date && daysUntil(p.date) >= 0 && daysUntil(p.date) <= 60).map((p) => ({
@@ -3122,7 +3130,7 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
       {(() => {
         const noAmount = index.filter((r) => !r.sample && !(r.amount > 0)).length;
         /* only nag about the last fortnight — a year of history is not a to-do list */
-        const since = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+        const since = daysFromNow(-14);
         /* Square bookings already wrote themselves into her clients' history */
         const unlogged = events.filter((e) =>
           e.date < today && e.date >= since && e.clientName && !e.logged &&
@@ -3325,7 +3333,7 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
 }
 
 function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = [], onPaige, mode, bizCfg, reviews = [], gallery = [], settings = {} }) {
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = ymd();
   const liveAlerts = alerts.filter((a) => !a.expires || a.expires >= todayISO);
   const hoursLine = (hrs) => {
     if (!hrs || !hrs.length) return "";
@@ -3341,8 +3349,8 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
   };
   const pp = BRANDS.pp, vg = BRANDS.vg, mkq = BRANDS.mkq, re = BRANDS.re, hub = BRANDS.hub;
   const cd = useMkqCountdown();
-  const today = new Date().toISOString().slice(0, 10);
-  const monthOut = new Date(Date.now() + 31 * 86400000).toISOString().slice(0, 10);
+  const today = ymd();
+  const monthOut = daysFromNow(31);
   const soonPageants = pageants.filter((p) => p.date && p.date >= today && p.date <= monthOut).sort((a, b) => a.date.localeCompare(b.date));
   const daysOut = (d) => Math.ceil((new Date(d + "T12:00") - new Date()) / 86400000);
   const alertBrand = (t) => (t === "PP" ? pp : t === "VG" ? vg : hub);
@@ -3652,7 +3660,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
 
   const addAlert = async () => {
     if (!alertForm.text.trim()) return;
-    await saveAlerts([{ id: "a" + Date.now(), text: alertForm.text.trim(), target: alertForm.target, expires: alertForm.expires || "", date: new Date().toISOString().slice(0, 10) }, ...alerts]);
+    await saveAlerts([{ id: "a" + Date.now(), text: alertForm.text.trim(), target: alertForm.target, expires: alertForm.expires || "", date: ymd() }, ...alerts]);
     setAlertForm({ text: "", target: "ALL", expires: "" });
     toast("Posted to your clients");
   };
@@ -3964,6 +3972,17 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
         </a>
       </div>
 
+      {/* Her invite wording */}
+      <SettingHead B={B} note="What goes out when you tap the message icon. Your link is added at the end.">Invite Message</SettingHead>
+      <div style={{ ...panelStyle(B), marginBottom: 4 }}>
+        <textarea style={{ ...input, minHeight: 108, lineHeight: 1.6 }}
+          defaultValue={settings.inviteText || "Hey there!\n\nIt's Paige with Pageant Perfect & Velvet Glow! I want to invite you to my brand new booking site, where everything is all under one link. Take a look and let me know what you think! Scheduling is OPEN \u{1F90D}"}
+          onBlur={(e) => { saveSettings({ ...settings, inviteText: e.target.value.trim() }); toast("Invite saved"); }} />
+        <p className="hq-mono" style={{ fontSize: 7, letterSpacing: 1.2, color: B.c.faint, marginTop: 7, lineHeight: 1.8 }}>
+          LEAVE BLANK TO GO BACK TO THE DEFAULT
+        </p>
+      </div>
+
       {/* Socials */}
       <SettingHead B={B} note="Each one shows as a follow button on that brand\u2019s page. Leave any blank to hide it.">Social Links</SettingHead>
       <div style={{ ...panelStyle(B) }}>
@@ -4233,7 +4252,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
           const beforeId = beforeFile ? await put(beforeFile) : "";
           const afterId = afterFile ? await put(afterFile) : "";
           await saveGallery([{ id: "gl" + Date.now(), kind: "glow", beforeId, afterId, caption, shade,
-            client: who || "", pub: publicOk !== false, date: new Date().toISOString().slice(0, 10) }, ...gallery]);
+            client: who || "", pub: publicOk !== false, date: ymd() }, ...gallery]);
         };
         const addWin = async (photoFile, name, title, date) => {
           const photoId = await put(photoFile);
@@ -4399,7 +4418,7 @@ function ReviewsPage({ B, reviews = [], saveReviews, lock, googleUrl }) {
   const submit = async () => {
     if (!form.name.trim() || !form.text.trim()) return;
     await saveReviews([
-      { id: "rv" + Date.now(), brand: form.brand, name: form.name.trim(), rating: Number(form.rating), text: form.text.trim(), date: new Date().toISOString().slice(0, 10), approved: false },
+      { id: "rv" + Date.now(), brand: form.brand, name: form.name.trim(), rating: Number(form.rating), text: form.text.trim(), date: ymd(), approved: false },
       ...reviews,
     ]);
     setForm({ name: "", rating: 5, text: "", brand: "VG" });
@@ -4850,7 +4869,7 @@ function StudioTab({ B, services, hours, reviews = [], saveReviews, gallery = []
   const mine = reviews.filter((r) => r.brand === code && r.approved !== false);
   const avg = mine.length ? Math.round((mine.reduce((a, r) => a + (r.rating || 5), 0) / mine.length) * 10) / 10 : 0;
   const shots = gallery.filter((g) => (isVG ? g.kind === "glow" : g.kind === "win")).length;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = ymd();
   const upcoming = pageants.filter((p) => p.date && p.date >= today).sort((a, b) => a.date.localeCompare(b.date));
   const openToday = (() => {
     const name = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][new Date().getDay()];
@@ -5020,7 +5039,7 @@ function StudioTab({ B, services, hours, reviews = [], saveReviews, gallery = []
 function ClientPortal({ client, events, saveEvents, pageants, onExit }) {
   const B = client.biz?.PP ? BRANDS.pp : client.biz?.VG ? BRANDS.vg : BRANDS.re;
   const { input } = useBrandBits(B);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = ymd();
   const [ev, setEv] = useState({ title: "", date: "", time: "" });
   const [added, setAdded] = useState(false);
 
@@ -5223,7 +5242,7 @@ function RealtyStudio({ B, leads, saveLeads }) {
   const [sent, setSent] = useState(false);
   const submitLead = async () => {
     if (!form.name.trim() || !form.address.trim()) return;
-    await saveLeads([{ ...form, id: "ld" + Date.now(), date: new Date().toISOString().slice(0, 10) }, ...leads]);
+    await saveLeads([{ ...form, id: "ld" + Date.now(), date: ymd() }, ...leads]);
     setForm(blank); setSent(true); setTimeout(() => setSent(false), 2500);
   };
 
@@ -5343,7 +5362,7 @@ function CalendarTab({ B, events, saveEvents, pageants, savePageants, clients, d
   const [adding, setAdding] = useState(false);
   const blank = { type: "lesson", title: "", clientName: "", date: "", time: "", durMin: 60, notes: "" };
   const [form, setForm] = useState(blank);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = ymd();
   const [cursor, setCursor] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [selDay, setSelDay] = useState(today);
 
@@ -5540,7 +5559,7 @@ function PageantsPane({ B, pageants, savePageants }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState(blank);
   const [open, setOpen] = useState(null);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = ymd();
 
   const upcoming = pageants.filter((p) => (p.date || "9999") >= today).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const past = pageants.filter((p) => (p.date || "9999") < today).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
@@ -5992,13 +6011,13 @@ function ClientsTab({ B, clients, saveClients, openPortal, clearSamples, hasSamp
 function ClientDetail({ B, client, onClose, onChange, onDelete, onPortal, settings = {} }) {
   const { input, Ghost } = useBrandBits(B);
   const [copied, setCopied] = useState(false);
-  const [visit, setVisit] = useState({ date: new Date().toISOString().slice(0, 10), service: "", style: "", notes: "" });
+  const [visit, setVisit] = useState({ date: ymd(), service: "", style: "", notes: "" });
   if (!client) return null;
   const history = (client.history || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   const addVisit = () => {
     if (!visit.service.trim()) return;
     onChange({ ...client, history: [...(client.history || []), { id: "v" + Date.now(), ...visit }] });
-    setVisit({ date: new Date().toISOString().slice(0, 10), service: "", style: "", notes: "" });
+    setVisit({ date: ymd(), service: "", style: "", notes: "" });
   };
   const infoRow = (label, val) => val ? (
     <div style={{ display: "flex", gap: 10, fontSize: 13.5, marginBottom: 5 }}>
@@ -6067,7 +6086,7 @@ function ClientDetail({ B, client, onClose, onChange, onDelete, onPortal, settin
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         {[["noshow", "LOG A NO SHOW"], ["late", "LOG A LATE CANCEL"]].map(([t, lab]) => (
           <button key={t}
-            onClick={() => onChange({ ...client, flags: [...(client.flags || []), { id: "f" + Date.now(), type: t, date: new Date().toISOString().slice(0, 10) }] })}
+            onClick={() => onChange({ ...client, flags: [...(client.flags || []), { id: "f" + Date.now(), type: t, date: ymd() }] })}
             className="hq-mono hq-press"
             style={{ flex: 1, padding: "10px 4px", borderRadius: 5, cursor: "pointer", border: `1px solid ${B.c.line}`,
               background: "none", color: B.c.faint, fontSize: 8, letterSpacing: 1.2, fontWeight: 700 }}>
@@ -6232,7 +6251,7 @@ function EstateDetail({ B, prop, onClose, onChange, onDelete }) {
   const log = (prop.log || []).slice().reverse();
   const addNote = () => {
     if (!note.trim()) return;
-    onChange({ ...prop, log: [...(prop.log || []), { id: "lg" + Date.now(), date: new Date().toISOString().slice(0, 10), note }] });
+    onChange({ ...prop, log: [...(prop.log || []), { id: "lg" + Date.now(), date: ymd(), note }] });
     setNote("");
   };
   return (
@@ -6293,7 +6312,7 @@ function VaultTab({ B, index, saveIndex, income, saveIncome, mileage, saveMileag
   };
   const saveReceipt = async () => {
     const a = pending.analysis; const id = "r" + Date.now();
-    const meta = { id, vendor: a.vendor || "Unknown", date: a.date || new Date().toISOString().slice(0, 10), amount: Number(a.amount) || 0, category: a.category || "Uncategorized", biz: a.biz || "Personal", deductible: a.deductible || "possibly", note: a.note || "", tip: a.tip || "", savedAt: new Date().toISOString() };
+    const meta = { id, vendor: a.vendor || "Unknown", date: a.date || ymd(), amount: Number(a.amount) || 0, category: a.category || "Uncategorized", biz: a.biz || "Personal", deductible: a.deductible || "possibly", note: a.note || "", tip: a.tip || "", savedAt: new Date().toISOString() };
     const ok = await saveJSON("receipt-img:" + id, { data: pending.base64 });
     if (!ok) { setError("Couldn't save the image — storage may be full."); return; }
     await saveIndex([meta, ...index]);
@@ -6302,7 +6321,7 @@ function VaultTab({ B, index, saveIndex, income, saveIncome, mileage, saveMileag
   const openReceipt = async (r) => { setOpen(r); setOpenImg(null); const img = await loadJSON("receipt-img:" + r.id); setOpenImg(img?.data || ""); };
   const del = async (r) => { try { await removeKey("receipt-img:" + r.id); } catch {} await saveIndex(index.filter((x) => x.id !== r.id)); setOpen(null); };
 
-  const incBlank = { date: new Date().toISOString().slice(0, 10), biz: "RE", source: "", amount: "", method: "Square" };
+  const incBlank = { date: ymd(), biz: "RE", source: "", amount: "", method: "Square" };
   const [inc, setInc] = useState(incBlank);
   const addIncome = async () => {
     if (!inc.source.trim() || !inc.amount) return;
@@ -6310,7 +6329,7 @@ function VaultTab({ B, index, saveIndex, income, saveIncome, mileage, saveMileag
     setInc(incBlank);
   };
 
-  const miBlank = { date: new Date().toISOString().slice(0, 10), biz: "RE", purpose: "", miles: "" };
+  const miBlank = { date: ymd(), biz: "RE", purpose: "", miles: "" };
   const [mi, setMi] = useState(miBlank);
   const addMiles = async () => {
     if (!mi.purpose.trim() || !mi.miles) return;
