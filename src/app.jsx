@@ -2721,63 +2721,7 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
   const [waitOpen, setWaitOpen] = useState(false);
   const [lookAt, setLookAt] = useState(null);
   const waiting = requests.filter((r) => r.kind === "waitlist");
-  const overdue = clients
-    .map((c) => {
-      const last = (c.history || []).reduce((m, v) => (v.date > m ? v.date : m), "");
-      return last ? { id: c.id, name: c.name, phone: (c.phone || "").replace(/\D/g, ""), days: Math.floor((Date.now() - new Date(last + "T12:00")) / 86400000), what: c.biz?.VG ? "glow" : "lesson" } : null;
-    })
-    .filter((x) => x && x.days >= 21)
-    .sort((a, b) => b.days - a.days)
-    .slice(0, 3);
-  /* came once, never came back — invisible until now */
-  const neverBack = clients
-    .map((c) => {
-      const seen = (c.history || []).length;
-      if (seen !== 1) return null;
-      const last = (c.history || [])[0];
-      const days = last && last.date ? Math.floor((Date.now() - new Date(last.date + "T12:00")) / 86400000) : 0;
-      if (days < 30) return null;
-      return { id: c.id, name: c.name, phone: (c.phone || "").replace(/\D/g, ""), days, what: c.biz?.VG ? "glow" : "lesson" };
-    })
-    .filter(Boolean)
-    .sort((a, b) => b.days - a.days)
-    .slice(0, 2);
 
-  const rebookMsg = (o) => {
-    const first = o.name.split(" ")[0];
-    return o.what === "glow"
-      ? `Hey ${first}! It's been a few weeks — want me to save you a glow spot this week? ✨ – Paige`
-      : `Hey ${first}! Ready to get back in the studio? I've got lesson spots open this week ♛ – Paige`;
-  };
-  const copyMsg = async (o) => {
-    try { await navigator.clipboard.writeText(rebookMsg(o)); setCopiedId(o.id); setTimeout(() => setCopiedId(""), 2000); } catch {}
-  };
-  /* big days radar */
-  const daysUntil = (d) => Math.ceil((new Date(d + "T12:00") - Date.now()) / 86400000);
-  const bigDays = [
-    ...clients.filter((c) => c.bigDate && daysUntil(c.bigDate) >= 0 && daysUntil(c.bigDate) <= 60).map((c) => ({
-      key: "bd" + c.id, mark: c.biz?.VG ? "✦" : "♛",
-      label: `${c.name.split(" ")[0]}'s ${c.bigLabel || "big day"}`,
-      days: daysUntil(c.bigDate),
-      booked: events.some((e) => (e.clientName || "").toLowerCase() === c.name.toLowerCase() && e.date >= new Date(new Date(c.bigDate + "T12:00").getTime() - 5 * 86400000).toISOString().slice(0, 10) && e.date <= c.bigDate),
-      what: c.biz?.VG ? "GLOW" : "LESSON",
-    })),
-    ...pageants.filter((p) => p.date && daysUntil(p.date) >= 0 && daysUntil(p.date) <= 60).map((p) => ({
-      key: "pg" + p.id, mark: "♛", label: p.name,
-      sub: (p.girls || []).map((g) => g.name.split(" ")[0]).join(", "),
-      days: daysUntil(p.date), booked: null,
-    })),
-  ].sort((a, b) => a.days - b.days).slice(0, 4);
-  /* monthly pulse */
-  const nowD = new Date();
-  const ymKey = `${nowD.getFullYear()}-${pad(nowD.getMonth() + 1)}`;
-  const monthEvts = events.filter((e) => (e.date || "").startsWith(ymKey) && e.date <= today);
-  const pulseGlows = monthEvts.filter((e) => e.type === "tan").length;
-  const pulseLessons = monthEvts.filter((e) => e.type === "lesson" || e.type === "dance").length;
-  const perMonth = Array.from({ length: nowD.getMonth() + 1 }, (_, m) =>
-    events.filter((e) => (e.date || "").startsWith(`${nowD.getFullYear()}-${pad(m + 1)}`) && (e.type === "tan" || e.type === "lesson" || e.type === "dance")).length);
-  const isBusiest = perMonth.length > 1 && perMonth[nowD.getMonth()] >= Math.max(...perMonth) && perMonth[nowD.getMonth()] > 0;
-  const monthNameP = nowD.toLocaleDateString("en-US", { month: "long" });
 
   const prettyLong = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   const addTodo = async () => {
@@ -2808,12 +2752,12 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
   const todoPanel = (
       <div style={{ ...card, padding: 0, marginBottom: 12, overflow: "hidden" }}>
         <button onClick={() => { const v = !todoOpen; setTodoOpen(v); try { localStorage.setItem("hq-todo-shut", v ? "0" : "1"); } catch {} }}
-          style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "12px 15px",
+          style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "11px 13px",
             background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
-          <span style={{ fontFamily: B.display, fontSize: 18, fontWeight: 600, color: B.c.ink, lineHeight: 1 }}>To Do</span>
+          <span style={{ fontFamily: B.display, fontSize: 15, fontWeight: 600, color: B.c.ink, lineHeight: 1 }}>To Do</span>
           {openCount > 0 && (
             <span className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.2, fontWeight: 700, borderRadius: 999,
-              padding: "3px 8px", background: B.c.accent, color: "#FFFFFF" }}>{openCount}</span>
+              padding: "2px 7px", background: B.c.accent, color: "#FFFFFF" }}>{openCount}</span>
           )}
           {openCount === 0 && todos.length > 0 && (
             <span className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.4, color: "#4E6B4E", fontWeight: 700 }}>ALL DONE ✓</span>
@@ -2823,26 +2767,26 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
         </button>
 
         {todoOpen && (
-          <div className="hq-fade" style={{ padding: "0 15px 13px" }}>
+          <div className="hq-fade" style={{ padding: "0 13px 12px" }}>
             <div style={{ display: "flex", gap: 7, marginBottom: 10 }}>
               <input value={todoText} onChange={(e) => setTodoText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") addTodo(); }}
                 placeholder="Something to get done…"
-                style={{ flex: 1, padding: "10px 12px", fontSize: 14, border: `1px solid ${B.c.line}`, borderRadius: 7, boxSizing: "border-box" }} />
+                style={{ flex: 1, padding: "8px 10px", fontSize: 12.5, border: `1px solid ${B.c.line}`, borderRadius: 6, boxSizing: "border-box" }} />
               <button onClick={() => setTodoDaily(!todoDaily)} className="hq-mono hq-press" title="Repeat every day"
-                style={{ padding: "0 11px", borderRadius: 7, cursor: "pointer", fontSize: 7.5, letterSpacing: 1.2, fontWeight: 700,
+                style={{ padding: "0 9px", borderRadius: 6, cursor: "pointer", fontSize: 6.5, letterSpacing: 1, fontWeight: 700,
                   border: `1px solid ${todoDaily ? B.c.accent : B.c.line}`,
                   background: todoDaily ? B.c.accent : "transparent", color: todoDaily ? "#FFFFFF" : B.c.faint }}>
                 DAILY
               </button>
               <button onClick={addTodo} disabled={!todoText.trim()} className="hq-press"
-                style={{ padding: "0 15px", borderRadius: 7, border: "none", cursor: "pointer",
-                  background: todoText.trim() ? B.c.metal : "#DCD5CA", color: B.c.deep, fontSize: 16, fontWeight: 600 }}>+</button>
+                style={{ padding: "0 12px", borderRadius: 6, border: "none", cursor: "pointer",
+                  background: todoText.trim() ? B.c.metal : "#DCD5CA", color: B.c.deep, fontSize: 14, fontWeight: 600 }}>+</button>
             </div>
 
             {todos.length === 0 && (
-              <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "2px 0 0", lineHeight: 1.6 }}>
-                Nothing on the list. Tap DAILY before adding something you do every day — it comes back each morning.
+              <p style={{ fontSize: 11.5, fontWeight: 300, color: B.c.faint, margin: "2px 0 0", lineHeight: 1.55 }}>
+Nothing yet. Tap DAILY before adding something you do every day.
               </p>
             )}
 
@@ -2859,14 +2803,14 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
                   {list.map((t) => {
                     const done = isDone(t);
                     return (
-                      <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 0" }}>
+                      <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
                         <button onClick={() => toggleTodo(t.id)} aria-label={done ? "Mark not done" : "Mark done"}
-                          style={{ width: 19, height: 19, borderRadius: "50%", cursor: "pointer", flexShrink: 0, padding: 0,
+                          style={{ width: 16, height: 16, borderRadius: "50%", cursor: "pointer", flexShrink: 0, padding: 0,
                             border: `1.5px solid ${done ? B.c.accent : B.c.faint}`,
-                            background: done ? B.c.accent : "transparent", color: "#fff", fontSize: 10, lineHeight: 1 }}>
+                            background: done ? B.c.accent : "transparent", color: "#fff", fontSize: 8.5, lineHeight: 1 }}>
                           {done ? "✓" : ""}
                         </button>
-                        <span style={{ flex: 1, fontSize: 13.5, fontWeight: 300, lineHeight: 1.4,
+                        <span style={{ flex: 1, fontSize: 12, fontWeight: 300, lineHeight: 1.4,
                           textDecoration: done ? "line-through" : "none", color: done ? B.c.faint : B.c.ink }}>
                           {t.text}
                         </span>
@@ -2874,7 +2818,7 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
                           <span className="hq-mono" style={{ fontSize: 6, letterSpacing: 1, color: B.c.accent, opacity: 0.75, flexShrink: 0 }}>DAILY</span>
                         )}
                         <button onClick={() => saveTodos(todos.filter((x) => x.id !== t.id))} aria-label="Remove"
-                          style={{ border: "none", background: "none", color: B.c.faint, fontSize: 13, padding: "2px 3px", cursor: "pointer", flexShrink: 0 }}>✕</button>
+                          style={{ border: "none", background: "none", color: B.c.faint, fontSize: 11, padding: "2px 3px", cursor: "pointer", flexShrink: 0 }}>✕</button>
                       </div>
                     );
                   })}
@@ -3054,76 +2998,15 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
         </div>
       </div>
 
-      {/* Needs attention — dark so it pops */}
-      {(overdue.length > 0 || neverBack.length > 0 || leads.length > 0 || requests.some((r) => r.kind !== "waitlist")) && (
-        <div style={{ padding: "14px 15px", borderRadius: 10, borderLeft: `3px solid ${B.c.accent}`,
-          background: `linear-gradient(165deg, ${B.c.deep} 10%, ${B.c.deep2} 100%)`, boxShadow: "0 4px 14px rgba(20,15,10,.22)" }}>
-          <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 2.5, color: B.c.gold, fontWeight: 500, marginBottom: 7 }}>NEEDS ATTENTION</div>
-          {requests.filter((r) => r.kind !== "waitlist" && r.kind !== "intake").map((r) => {
-            const kindLabel = r.kind === "waitlist" ? "wants a sooner spot" : r.kind === "reschedule" ? "wants to move a time" : "has a question";
-            const ph = String(r.phone || "").replace(/\D/g, "").slice(-10);
-            return (
-              <div key={r.id} style={{ padding: "7px 0", borderBottom: "1px solid rgba(255,255,255,.12)" }}>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 400, color: B.c.gold, minWidth: 0 }}>
-                    {r.brand === "VG" ? "\u2726" : "\u265B"} {r.name} {kindLabel}
-                  </span>
-                  <span className="hq-mono" style={{ fontSize: 7.5, color: B.c.soft, opacity: 0.6, whiteSpace: "nowrap" }}>{String(r.date).slice(5).replace("-", ".")}</span>
-                </div>
-                {r.note && <div style={{ fontSize: 12.5, fontWeight: 300, color: B.c.soft, opacity: 0.9, marginTop: 3, lineHeight: 1.5 }}>&ldquo;{r.note}&rdquo;</div>}
-                <div style={{ display: "flex", gap: 7, marginTop: 6 }}>
-                  {ph && (
-                    <a href={`sms:+1${ph}`} className="hq-mono hq-press"
-                      style={{ padding: "5px 12px", borderRadius: 3, border: `1px solid ${B.c.gold}`, color: B.c.gold, fontSize: 8, letterSpacing: 1.5, textDecoration: "none", fontWeight: 600 }}>TEXT</a>
-                  )}
-                  <button onClick={() => onClearRequest && onClearRequest(r.id)} className="hq-mono hq-press"
-                    style={{ padding: "5px 12px", borderRadius: 3, border: "1px solid rgba(255,255,255,.28)", background: "none", color: B.c.soft, fontSize: 8, letterSpacing: 1.5, cursor: "pointer", fontWeight: 600 }}>DONE</button>
-                </div>
-              </div>
-            );
-          })}
-          {overdue.map((o) => (
-            <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,.12)" }}>
-              <span style={{ flex: 1, fontSize: 13, fontWeight: 300, minWidth: 0, color: B.c.soft }}>{o.name} — rebook a {o.what} <span className="hq-mono" style={{ fontSize: 8, color: B.c.gold, opacity: 0.7 }}>· {o.days}D</span></span>
-              {o.phone ? (
-                <a href={`sms:+1${o.phone}?&body=${encodeURIComponent(rebookMsg(o))}`} className="hq-mono hq-press"
-                  style={{ padding: "5px 11px", borderRadius: 3, border: `1px solid ${B.c.gold}`, color: B.c.gold, fontSize: 8.5, letterSpacing: 1.5, textDecoration: "none", fontWeight: 500, flexShrink: 0 }}>TEXT</a>
-              ) : (
-                <button onClick={() => copyMsg(o)} className="hq-mono hq-press"
-                  style={{ padding: "5px 9px", borderRadius: 3, border: `1px solid ${copiedId === o.id ? "#9FD49F" : B.c.gold}`, background: "none", color: copiedId === o.id ? "#9FD49F" : B.c.gold, fontSize: 8.5, letterSpacing: 1.5, fontWeight: 500, flexShrink: 0, cursor: "pointer" }}>
-                  {copiedId === o.id ? "COPIED ✓" : "COPY TEXT"}
-                </button>
-              )}
-            </div>
-          ))}
-          {neverBack.map((o) => (
-            <div key={"nb" + o.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,.12)" }}>
-              <span style={{ flex: 1, fontSize: 13, fontWeight: 300, minWidth: 0, color: B.c.soft }}>
-                {o.name} came once and never came back
-                <span className="hq-mono" style={{ fontSize: 8, color: B.c.gold, opacity: 0.7 }}> · {o.days}D</span>
-              </span>
-              {o.phone && (
-                <a href={`sms:+1${o.phone}?&body=${encodeURIComponent(`Hey ${o.name.split(" ")[0]}! It has been a while — I would love to get you back in. Want me to save you a ${o.what} spot? – Paige`)}`}
-                  className="hq-mono hq-press"
-                  style={{ padding: "5px 11px", borderRadius: 3, border: `1px solid ${B.c.gold}`, color: B.c.gold, fontSize: 8.5, letterSpacing: 1.5, textDecoration: "none", fontWeight: 500, flexShrink: 0 }}>TEXT</a>
-              )}
-            </div>
-          ))}
-
-          {leads.length > 0 && (
-            <div style={{ fontSize: 13, fontWeight: 300, padding: "6px 0 1px", color: B.c.soft }}>
-              <span style={{ color: B.c.gold }}>◈</span> {leads.length} home valuation request{leads.length === 1 ? "" : "s"} waiting in Settings
-            </div>
-          )}
-        </div>
-      )}
-
       {/* what is quietly piling up */}
       {(() => {
         const noAmount = index.filter((r) => !r.sample && !(r.amount > 0)).length;
-        /* only nag about the last fortnight — a year of history is not a to-do list */
+        /* Square bookings already wrote themselves into her clients' history,
+           so they are not chores. Only manual appointments need logging. */
         const since = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
-        const unlogged = events.filter((e) => e.date < today && e.date >= since && e.clientName && !e.logged && isBizType(e.type)).length;
+        const unlogged = events.filter((e) =>
+          e.date < today && e.date >= since && e.clientName && !e.logged && !e.square && !String(e.id || "").startsWith("sq_") && isBizType(e.type)
+        ).length;
         const bits = [
           noAmount && { n: noAmount, text: `receipt${noAmount === 1 ? "" : "s"} without an amount`, go: () => onOpenVault && onOpenVault("expenses") },
           unlogged && { n: unlogged, text: `visit${unlogged === 1 ? "" : "s"} not logged`, go: null },
