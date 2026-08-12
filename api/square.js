@@ -113,6 +113,7 @@ async function toEvent(b, locationNames = {}) {
     date,
     time,
     durMin: seg.duration_minutes || 30,
+    mins: seg.duration_minutes || 60,
     notes: b.customer_note || "",
     status: b.status,
   };
@@ -251,6 +252,36 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Square sync isn't configured yet — add the environment variables in Vercel." });
   }
 
+  /* ---- write completed bookings into each client's visit history ---- */
+  if (req.method === "GET" && req.query.history) {
+    try {
+      const events = (await sbGet("events")) || [];
+      const clients = (await sbGet("clients")) || [];
+      const today = new Date().toISOString().slice(0, 10);
+      const norm = (s) => String(s || "").trim().toLowerCase();
+
+      let touched = 0, visits = 0;
+      const next = clients.map((c) => {
+        const mine = events.filter((e) =>
+          e.date < today && e.clientName && norm(e.clientName) === norm(c.name) && e.status !== "CANCELLED_BY_CUSTOMER");
+        if (!mine.length) return c;
+        const have = new Set((c.history || []).map((v) => v.id));
+        const add = mine
+          .filter((e) => !have.has("h_" + e.id))
+          .map((e) => ({ id: "h_" + e.id, date: e.date, service: e.title || "", style: "", notes: "", fromSquare: true }));
+        if (!add.length) return c;
+        visits += add.length; touched++;
+        return { ...c, history: [...add, ...(c.history || [])].sort((a, b) => String(b.date).localeCompare(String(a.date))) };
+      });
+
+      if (visits) await sbPut("clients", next);
+      return res.status(200).json({ ok: true, clientsUpdated: touched, visitsAdded: visits,
+        note: visits ? "Their glow age and rebook list will be right now." : "Nothing new to add." });
+    } catch (e) {
+      return res.status(500).json({ error: "Could not write history", detail: String(e) });
+    }
+  }
+
   /* ---- what is actually sitting in her calendar right now ---- */
   if (req.method === "GET" && req.query.events) {
     try {
@@ -387,7 +418,7 @@ export default async function handler(req, res) {
       for (const b of bookings) evts.push(await toEvent(b, locNames));
       const result = await upsertEvents(evts);
 
-      let paid = 0, payErr = null;
+      let paid = 0, payErr = null, payFound = 0, paySkipped = 0;
       try {
         const since = rfc(new Date(Date.now() - (everything ? 365 : 30) * 86400000));
         let pcur = "";
@@ -396,7 +427,10 @@ export default async function handler(req, res) {
             (pcur ? `&cursor=${encodeURIComponent(pcur)}` : ""), { headers: sqHeaders() });
           const pj = await pr.json();
           if (failed(pj)) { payErr = pj.errors[0]?.detail || null; break; }
-          for (const p of pj.payments || []) { if (await recordPayment(p)) paid++; }
+          for (const p of pj.payments || []) {
+            payFound++;
+            if (await recordPayment(p)) paid++; else paySkipped++;
+          }
           pcur = pj.cursor || "";
           if (!pcur) break;
         }
@@ -412,6 +446,8 @@ export default async function handler(req, res) {
         found,
         paid,
         payErr,
+        payFound,
+        paySkipped,
         ...result,
         window: `${backDays} days back, ${fwdDays} forward, in ${windows} chunks`,
         note: found === 0
