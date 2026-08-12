@@ -311,7 +311,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1.5px
 /* Unified toolbar — bottom bar on phones, left rail on desktop */
 .hq-nav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; }
 .hq-nav-inner { max-width: 560px; margin: 0 auto; display: flex; }
-.hq-nav-inner button + button { border-left: 1.5px solid rgba(0,0,0,.16); }
+.hq-nav-inner button + button { border-left: 1px solid rgba(0,0,0,.08); }
 @media (min-width: 900px) {
   .hq-nav { top: 0; right: auto; bottom: 0; width: 132px; border-top: none !important; border-right: 1px solid var(--nav-accent, #C6A15B); }
   .hq-nav-inner { flex-direction: column; max-width: none; height: 100%; justify-content: flex-start; padding-top: 30px; }
@@ -1084,16 +1084,20 @@ export default function PaigeHQ() {
       {mode === "paige" && (
       <nav className="hq-nav" style={{ background: B.c.card, borderTop: `2px solid ${B.c.deep}`, "--nav-accent": B.c.deep }}>
         <div className="hq-nav-inner">
-          {[["today", "Today"], ["calendar", "Calendar"], ["clients", "Clients"], ["vault", "Tax Vault"], ["settings", "Settings"]].map(([key, label]) => (
-            <button key={key} onClick={() => setTab(key)}
-              style={{ flex: 1, padding: "16px 0 15px", background: tab === key ? B.c.deep : "none", border: "none", color: tab === key ? B.c.gold : B.c.ink }}>
-              <span style={{ fontSize: 10.5, letterSpacing: 0.8, textTransform: "uppercase", fontWeight: 700 }}>{label}</span>
-            </button>
-          ))}
-          <button onClick={() => { try { localStorage.removeItem("hq-unlocked-at"); } catch {} setUnlocked(false); }}
-            style={{ flex: 1, padding: "16px 0 15px", background: "none", border: "none", color: B.c.faint }}>
-            <span className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 1, textTransform: "uppercase", fontWeight: 700 }}>Lock</span>
-          </button>
+          {[["today", "Today", "clock"], ["calendar", "Calendar", "calendar"], ["clients", "Clients", "user"],
+            ["vault", "Vault", "check"], ["settings", "Settings", "sparkle"]].map(([key, label, icon]) => {
+            const on = tab === key;
+            return (
+              <button key={key} onClick={() => setTab(key)}
+                style={{ flex: 1, padding: "10px 0 calc(9px + env(safe-area-inset-bottom, 0px))", minHeight: 58,
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                  background: on ? B.c.deep : "none", border: "none", cursor: "pointer",
+                  color: on ? B.c.gold : B.c.faint }}>
+                <Icon name={icon} size={19} stroke={on ? 2 : 1.6} />
+                <span style={{ fontSize: 9.5, letterSpacing: 0.3, fontWeight: on ? 700 : 500 }}>{label}</span>
+              </button>
+            );
+          })}
         </div>
       </nav>
       )}
@@ -2602,6 +2606,7 @@ function ProfileSheet({ B, settings = {}, saveSettings, onClose, onSettings, onB
 /* Each kind of work gets its own faint wash, so a day reads at a glance
    without anyone having to parse the words. */
 const TYPE_TINT = {
+  gap:     { bg: "#F4F4F5", edge: "#CFCFD4", ink: "#8A8A92" },
   tan:     { bg: "#FAF2EA", edge: "#C08A57", ink: "#7A4E2B" },
   lesson:  { bg: "#F2F1F9", edge: "#8B84B8", ink: "#4A4470" },
   dance:   { bg: "#EDF5EF", edge: "#6E9B78", ink: "#375B41" },
@@ -2610,7 +2615,39 @@ const TYPE_TINT = {
   emcee:   { bg: "#F6F0F3", edge: "#B58AA0", ink: "#5E3F4E" },
   client:  { bg: "#F3F1EE", edge: "#9A8E7E", ink: "#4E463B" },
 };
+/* "Coaching (1Hour) · Regular" is Square's wording, not hers */
+const cleanTitle = (s = "") => String(s)
+  .replace(/\s*·\s*(regular|standard|default|normal)\s*$/i, "")
+  .replace(/\s*\((\d+)\s*hour?s?\)/i, "")
+  .replace(/\s*\((\d+)\s*min(ute)?s?\)/i, "")
+  .trim();
+
+const lenLabel = (m) => (m >= 60 ? `${m / 60 % 1 ? (m / 60).toFixed(1) : m / 60}H` : `${m}m`);
+
 const tintFor = (type) => TYPE_TINT[type] || TYPE_TINT.client;
+
+/* A quiet grey row for the gap between two bookings, so she can see
+   at a glance where her breaks fall. */
+const withBreaks = (list) => {
+  const out = [];
+  const mins = (t) => { const [h, m] = String(t || "0:0").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+  for (let i = 0; i < list.length; i++) {
+    out.push(list[i]);
+    const a = list[i], b = list[i + 1];
+    if (!b || !a.time || !b.time) continue;
+    const end = mins(a.time) + (Number(a.mins) || 60);
+    const gap = mins(b.time) - end;
+    if (gap >= 25) {
+      const hh = Math.floor(end / 60), mm = end % 60;
+      out.push({
+        id: "gap" + i, kind: "gap", type: "gap", isGap: true,
+        time: `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`,
+        title: gap >= 60 ? `${Math.floor(gap / 60)}h${gap % 60 ? ` ${gap % 60}m` : ""} free` : `${gap}m free`,
+      });
+    }
+  }
+  return out;
+};
 
 /* ================= PAIGE'S TODAY (owner dashboard) ================= */
 const HYPE_NAMES = [
@@ -2767,72 +2804,8 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
     </div>
   );
 
-  return (
-    <div className="hq-fade">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-        <div>
-          <H>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, {nick}</H>
-          <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 2.5, color: B.c.faint, margin: "4px 0 12px" }}>{prettyLong.toUpperCase()}</div>
-        </div>
-        <div style={{ display: "flex", gap: 7, flexShrink: 0, marginTop: 2 }}>
-          {[
-            { key: "cam", label: "Snap a receipt or a photo", icon: "camera", on: false, fn: () => camRef.current && camRef.current.click() },
-            { key: "msg", label: "Text a client their link", icon: "message", on: false, fn: () => onOpenMessages && onOpenMessages() },
-            { key: "sq", label: "Sync bookings from Square", icon: "square", on: false, fn: () => onSyncSquare && onSyncSquare() },
-            { key: "add", label: addOpen ? "Close" : "Add something", icon: addOpen ? "close" : "plus", on: addOpen, fn: () => setAddOpen(!addOpen) },
-          ].map((b) => (
-            <button key={b.key} onClick={b.fn} aria-label={b.label} className="hq-press"
-              style={{
-                width: 38, height: 38, borderRadius: 11, display: "grid", placeItems: "center", cursor: "pointer", border: "none",
-                background: b.on
-                  ? `linear-gradient(160deg, ${B.c.accent} 0%, ${B.c.deep} 120%)`
-                  : `linear-gradient(160deg, ${B.c.deep2} 0%, ${B.c.deep} 100%)`,
-                color: B.c.gold,
-                boxShadow: `0 3px 7px rgba(20,15,10,.30), inset 0 1px 0 rgba(255,255,255,.16), inset 0 -2px 4px rgba(0,0,0,.32)`,
-              }}>
-              <Icon name={b.icon} size={17} />
-            </button>
-          ))}
-        </div>
-        <input ref={camRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
-          onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f && onCapture) onCapture(f); e.target.value = ""; }} />
-      </div>
-
-      {addOpen && (
-        <div className="hq-fade" style={{ ...card, padding: 14, marginBottom: 14 }}>
-          <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: B.c.accent, marginBottom: 8 }}>ADD A TO-DO</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input style={{ ...input, flex: 1 }} placeholder="e.g., order more solution" value={todoText}
-              onChange={(e) => setTodoText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTodo()} />
-            <button onClick={addTodo} disabled={!todoText.trim()} aria-label="Save to-do"
-              style={{ width: 46, height: 46, borderRadius: 10, border: "none", background: todoText.trim() ? B.c.accent : "#CBC2B4", color: "#fff", fontSize: 22, fontWeight: 300, lineHeight: 1, flexShrink: 0 }}>+</button>
-          </div>
-          <button onClick={onOpenCalendar} className="hq-mono"
-            style={{ width: "100%", marginTop: 10, padding: "9px 0 2px", border: "none", background: "none", color: B.c.accent2 || B.c.accent, fontSize: 8.5, letterSpacing: 2, fontWeight: 500 }}>
-            OPEN CALENDAR — ADD AN APPOINTMENT →
-          </button>
-        </div>
-      )}
-
-      {/* what her clients are seeing right now */}
-      <NewsTicker hub={B} alerts={alerts} gallery={gallery} reviews={reviews} pageants={pageants}
-        settings={settings} onGo={() => onOpenClients && onOpenClients()} owner />
-
-      {/* This week's money */}
-      <div className="hq-stagger" style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        {[[money(vgWeek), "✦ TANNING", "income"], [money(ppWeek), "♛ COACHING", "income"], [money(vgWeek + ppWeek), "TOTAL", "trends"]].map(([v, lab, dest]) => (
-          <button key={lab} onClick={() => onOpenVault && onOpenVault(dest)} className="hq-press"
-            style={{ flex: 1, padding: "11px 8px", textAlign: "center", cursor: "pointer", border: "none", borderRadius: 8,
-              borderTop: `2.5px solid ${lab === "TOTAL" ? (B.c.accent2 || B.c.accent) : B.c.accent}`,
-              background: `linear-gradient(165deg, ${B.c.deep} 10%, ${B.c.deep2} 100%)`,
-              boxShadow: "0 3px 10px rgba(20,15,10,.18)" }}>
-            <div className="hq-mono" style={{ fontSize: 15.5, fontWeight: 500, color: B.c.gold }}>{v}</div>
-            <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.2, color: B.c.soft, opacity: 0.75, marginTop: 3 }}>{lab}</div>
-          </button>
-        ))}
-      </div>
-
-      {/* TO DO — hers to run the day from */}
+  /* built here so it can sit in a column beside the day */
+  const todoPanel = (
       <div style={{ ...card, padding: 0, marginBottom: 12, overflow: "hidden" }}>
         <button onClick={() => { const v = !todoOpen; setTodoOpen(v); try { localStorage.setItem("hq-todo-shut", v ? "0" : "1"); } catch {} }}
           style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "12px 15px",
@@ -2919,21 +2892,77 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
           </div>
         )}
       </div>
+  );
 
-      {/* MKQ countdown + today's agenda, side by side */}
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
-        <div style={{ position: "relative", flex: 1, minWidth: 160, borderRadius: 8, overflow: "hidden", boxShadow: "0 3px 12px rgba(0,0,0,.30)", alignSelf: "flex-start" }}>
-          <img src={MKQ_POSTER} alt="Miss Kentucky's Queen — a new adventure, coming October 3rd, 2026"
-            style={{ width: "100%", display: "block" }} />
-          <CountdownPill cd={cd} />
+  return (
+    <div className="hq-fade">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+        <div>
+          <H>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, {nick}</H>
+          <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 2.5, color: B.c.faint, margin: "4px 0 12px" }}>{prettyLong.toUpperCase()}</div>
         </div>
-        <div style={{ ...card, flex: 1.15, minWidth: 190, padding: "13px 15px", borderLeft: `3px solid ${B.c.accent}` }}>
+        <div style={{ display: "flex", gap: 7, flexShrink: 0, marginTop: 2 }}>
+          {[
+            { key: "cam", label: "Snap a receipt or a photo", icon: "camera", on: false, fn: () => camRef.current && camRef.current.click() },
+            { key: "msg", label: "Text a client their link", icon: "message", on: false, fn: () => onOpenMessages && onOpenMessages() },
+            { key: "sq", label: "Sync bookings from Square", icon: "square", on: false, fn: () => onSyncSquare && onSyncSquare() },
+            { key: "add", label: addOpen ? "Close" : "Add something", icon: addOpen ? "close" : "plus", on: addOpen, fn: () => setAddOpen(!addOpen) },
+          ].map((b) => (
+            <button key={b.key} onClick={b.fn} aria-label={b.label} className="hq-press"
+              style={{
+                width: 38, height: 38, borderRadius: 11, display: "grid", placeItems: "center", cursor: "pointer", border: "none",
+                background: b.on
+                  ? `linear-gradient(160deg, ${B.c.accent} 0%, ${B.c.deep} 120%)`
+                  : `linear-gradient(160deg, ${B.c.deep2} 0%, ${B.c.deep} 100%)`,
+                color: B.c.gold,
+                boxShadow: `0 3px 7px rgba(20,15,10,.30), inset 0 1px 0 rgba(255,255,255,.16), inset 0 -2px 4px rgba(0,0,0,.32)`,
+              }}>
+              <Icon name={b.icon} size={17} />
+            </button>
+          ))}
+        </div>
+        <input ref={camRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+          onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f && onCapture) onCapture(f); e.target.value = ""; }} />
+      </div>
+
+      {addOpen && (
+        <div className="hq-fade" style={{ ...card, padding: 14, marginBottom: 14 }}>
+          <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: B.c.accent, marginBottom: 8 }}>ADD A TO-DO</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input style={{ ...input, flex: 1 }} placeholder="e.g., order more solution" value={todoText}
+              onChange={(e) => setTodoText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTodo()} />
+            <button onClick={addTodo} disabled={!todoText.trim()} aria-label="Save to-do"
+              style={{ width: 46, height: 46, borderRadius: 10, border: "none", background: todoText.trim() ? B.c.accent : "#CBC2B4", color: "#fff", fontSize: 22, fontWeight: 300, lineHeight: 1, flexShrink: 0 }}>+</button>
+          </div>
+          <button onClick={onOpenCalendar} className="hq-mono"
+            style={{ width: "100%", marginTop: 10, padding: "9px 0 2px", border: "none", background: "none", color: B.c.accent2 || B.c.accent, fontSize: 8.5, letterSpacing: 2, fontWeight: 500 }}>
+            OPEN CALENDAR — ADD AN APPOINTMENT →
+          </button>
+        </div>
+      )}
+
+      {/* what her clients are seeing right now */}
+      <NewsTicker hub={B} alerts={alerts} gallery={gallery} reviews={reviews} pageants={pageants}
+        settings={settings} onGo={() => onOpenClients && onOpenClients()} owner />
+
+      {/* today, side by side */}
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 4 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>{todoPanel}</div>
+        <div style={{ ...card, flex: 1, minWidth: 0, padding: "13px 14px", borderLeft: `3px solid ${B.c.accent}` }}>
           <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: B.c.accent, marginBottom: 6 }}>TODAY&rsquo;S SCHEDULE · {todayList.length} BOOKED</div>
           {todayList.length === 0 && <p style={{ fontSize: 13, fontWeight: 300, color: B.c.faint, margin: 0 }}>A clear day — nothing on the books.</p>}
-          {todayList.map((e2, i) => {
-            const past = isPast(e2);
-            const next = upNext && upNext.id === e2.id && upNext.kind === e2.kind;
+          {withBreaks(todayList).map((e2, i) => {
+            const past = e2.isGap ? false : isPast(e2);
+            const next = !e2.isGap && upNext && upNext.id === e2.id && upNext.kind === e2.kind;
             const t = tintFor(e2.type);
+            if (e2.isGap) return (
+              <div key={e2.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 11px", marginBottom: 6,
+                borderRadius: 8, background: t.bg, border: `1px dashed ${t.edge}` }}>
+                <span className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.2, color: t.ink }}>{prettyTime(e2.time)}</span>
+                <span style={{ flex: 1, height: 1, background: t.edge }} />
+                <span className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.2, color: t.ink, fontStyle: "italic" }}>{e2.title}</span>
+              </div>
+            );
             return (
             <div key={e2.kind + e2.id} style={{
               padding: "9px 11px", marginBottom: 6, borderRadius: 8,
@@ -3013,7 +3042,8 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
                 background: t.bg, borderLeft: `3px solid ${t.edge}`,
               }}>
                 <div style={{ fontSize: 13, fontWeight: 500, color: t.ink, lineHeight: 1.35 }}>
-                  <span style={{ marginRight: 6 }}>{EVENT_TYPES[e2.type]?.mark}</span>{e2.title}
+                  <span style={{ marginRight: 6 }}>{EVENT_TYPES[e2.type]?.mark}</span>{cleanTitle(e2.title)}
+                  {e2.mins ? <span style={{ fontSize: 9, fontStyle: "italic", fontWeight: 300, opacity: 0.6, marginLeft: 5 }}>({lenLabel(e2.mins)})</span> : null}
                 </div>
                 <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 1, color: t.ink, opacity: 0.72, marginTop: 3 }}>
                   {prettyTime(e2.time)}{e2.clientName ? ` · ${e2.clientName.toUpperCase()}` : ""}
@@ -3091,7 +3121,9 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
       {/* what is quietly piling up */}
       {(() => {
         const noAmount = index.filter((r) => !r.sample && !(r.amount > 0)).length;
-        const unlogged = events.filter((e) => e.date < today && e.clientName && !e.logged && isBizType(e.type)).length;
+        /* only nag about the last fortnight — a year of history is not a to-do list */
+        const since = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+        const unlogged = events.filter((e) => e.date < today && e.date >= since && e.clientName && !e.logged && isBizType(e.type)).length;
         const bits = [
           noAmount && { n: noAmount, text: `receipt${noAmount === 1 ? "" : "s"} without an amount`, go: () => onOpenVault && onOpenVault("expenses") },
           unlogged && { n: unlogged, text: `visit${unlogged === 1 ? "" : "s"} not logged`, go: null },
