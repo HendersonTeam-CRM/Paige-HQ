@@ -23,7 +23,7 @@ const BRANDS = {
     display: "'Cormorant Garamond', Georgia, serif",
     c: {
       deep: "#1C1A18", deep2: "#2A2724", accent: "#A8927A", gold: "#E9DFD2", soft: "#F1ECE4",
-      rose: "#C4A990", bg: "#F8F6F2", card: "#FFFFFF", ink: "#201D1A", faint: "#8F887F", line: "#E6E1D8",
+      rose: "#C4A990", bg: "#F7F3EC", card: "#FFFFFF", ink: "#1C1916", faint: "#8A8279", line: "#EBE4D9",
       metal: "linear-gradient(120deg,#8A7358 0%,#E9DFD2 45%,#A8927A 100%)",
     },
     services: [], hours: [],
@@ -131,9 +131,17 @@ const inviteLink = (settings, phone) => {
   const d = String(phone || "").replace(/\D/g, "").slice(-10);
   return d ? `${clientSite(settings)}/?me=${d}` : clientSite(settings);
 };
+/* Her own wording, edited in Settings → CONTENT. Every place that sends the
+   app out uses this, so it only has to be right in one spot. */
+const DEFAULT_INVITE =
+  "Hey there!\n\nIt's Paige with Pageant Perfect & Velvet Glow! I want to invite you to my brand new booking site, where everything is all under one link. Take a look and let me know what you think! Scheduling is OPEN \u{1F90D}";
+
 const inviteText = (settings, client) => {
   const first = String((client && client.name) || "").split(" ")[0];
-  return `${first ? first + ", here" : "Here"}'s your own page with me — your appointments, your notes, and booking all in one spot. Save it to your phone: ${inviteLink(settings, client && client.phone)}`;
+  const body = ((settings && settings.inviteText) || DEFAULT_INVITE).trim();
+  /* greet them by name when we know it */
+  const greeted = first ? body.replace(/^Hey there!/i, `Hey ${first}!`) : body;
+  return `${greeted}\n\n${inviteLink(settings, client && client.phone)}`;
 };
 
 BRANDS.me = { ...BRANDS.hub, key: "me", name: "MY PORTAL", sub: "", byline: "YOUR VISITS & WHAT'S NEXT", mark: "❋", short: "ME" };
@@ -142,14 +150,15 @@ BRANDS.me = { ...BRANDS.hub, key: "me", name: "MY PORTAL", sub: "", byline: "YOU
    Velvet Glow's espresso and copper, and MKQ's teal. A deep plum-brown
    that all three sit against without fighting. */
 const LUXE = {
-  deep: "#1E1619",
-  deep2: "#2E2226",
-  edge: "#3D2E33",
-  gold: "#DCC49A",
-  champagne: "#EFE0C6",
+  deep: "#33333A",
+  deep2: "#45444E",
+  edge: "#5A5964",
+  gold: "#E4B98A",
+  champagne: "#F0D9BC",
   copper: "#B0764A",
   teal: "#6EC1D6",
-  soft: "#B9A99C",
+  rose: "#D9A882",
+  soft: "#B3A9C6",
 };
 
 const MINI_BRANDS = ["mkq", "re"];
@@ -157,72 +166,74 @@ const MAIN_BRANDS = ["vg", "pp"];
 
 /* Paige's personal portal themes — all light, each with a two-color accent pair */
 const PORTAL_THEMES = {
-  blush: { label: "Blush & Gold", c: {
-    deep: "#4A3540", deep2: "#5D4450", accent: "#C4849C", accent2: "#B99855", gold: "#F0DDE4", soft: "#F6ECEF",
-    rose: "#D9A7B8", bg: "#FBF8F9", card: "#FFFFFF", ink: "#322730", faint: "#9C8B93", line: "#EDDFE4",
-    metal: "linear-gradient(120deg,#C4849C 0%,#F0DDE4 45%,#B99855 100%)",
+  blush: { label: "Lavender & Gold", c: {
+    deep: "#6259A4", deep2: "#7B72BE", accent: "#7A6FC0", accent2: "#E0B183", gold: "#F3F0FC", soft: "#F2F0FC",
+    rose: "#D9A882", bg: "#EDECF1", card: "#F9F8FC", ink: "#332C55", faint: "#928DA6", line: "#E4E1F0",
+    metal: "linear-gradient(120deg,#7A6FC0 0%,#F3F0FC 45%,#E0B183 100%)",
   } },
   champagne: { label: "Champagne & Terracotta", c: {
     deep: "#4C4133", deep2: "#605243", accent: "#B99855", accent2: "#A0674B", gold: "#EFE3CC", soft: "#F5EEE1",
-    rose: "#C89B7B", bg: "#FAF7F1", card: "#FFFFFF", ink: "#332C22", faint: "#9C9184", line: "#EAE1D2",
+    rose: "#C89B7B", bg: "#EAE9E5", card: "#F6F4F0", ink: "#332C22", faint: "#9C9184", line: "#EAE1D2",
     metal: "linear-gradient(120deg,#B99855 0%,#EFE3CC 45%,#A0674B 100%)",
   } },
   sage: { label: "Sage & Sky", c: {
     deep: "#3B4A3E", deep2: "#4C5F50", accent: "#7E9B72", accent2: "#7996B4", gold: "#DFE9DA", soft: "#ECF2E9",
-    rose: "#A7BFA0", bg: "#F7FAF6", card: "#FFFFFF", ink: "#2A332C", faint: "#8C988E", line: "#E0E8DD",
+    rose: "#A7BFA0", bg: "#E9EBE9", card: "#F4F6F4", ink: "#2A332C", faint: "#8C988E", line: "#E0E8DD",
     metal: "linear-gradient(120deg,#7E9B72 0%,#DFE9DA 45%,#7996B4 100%)",
   } },
   coastal: { label: "Coastal & Sand", c: {
     deep: "#37475C", deep2: "#465C77", accent: "#5B7FA6", accent2: "#C2A878", gold: "#DCE6F0", soft: "#EAF0F6",
-    rose: "#93A9C4", bg: "#F7F9FB", card: "#FFFFFF", ink: "#27303C", faint: "#8B95A3", line: "#DFE6EE",
+    rose: "#93A9C4", bg: "#EAEBEC", card: "#F5F6F7", ink: "#27303C", faint: "#8B95A3", line: "#DFE6EE",
     metal: "linear-gradient(120deg,#5B7FA6 0%,#DCE6F0 45%,#C2A878 100%)",
   } },
   onyx: { label: "Onyx & Gold", c: {
     deep: "#16161A", deep2: "#26262C", accent: "#B99855", accent2: "#8A8A94", gold: "#F0E3C8", soft: "#F4F2EF",
-    rose: "#C9AE86", bg: "#FAF9F7", card: "#FFFFFF", ink: "#1C1C20", faint: "#8D8D95", line: "#E6E4E0",
+    rose: "#C9AE86", bg: "#EBEBEA", card: "#F7F6F4", ink: "#1C1C20", faint: "#8D8D95", line: "#DEDCD7",
     metal: "linear-gradient(120deg,#B99855 0%,#F0E3C8 45%,#8A8A94 100%)",
   } },
   emerald: { label: "Emerald & Ivory", c: {
     deep: "#12332A", deep2: "#1D4839", accent: "#2F6B54", accent2: "#B99855", gold: "#DCEAE2", soft: "#EDF4EF",
-    rose: "#8FB6A2", bg: "#F7FAF8", card: "#FFFFFF", ink: "#17281F", faint: "#87968C", line: "#DFE9E2",
+    rose: "#8FB6A2", bg: "#EAEBEA", card: "#F4F6F5", ink: "#17281F", faint: "#87968C", line: "#DFE9E2",
     metal: "linear-gradient(120deg,#2F6B54 0%,#DCEAE2 45%,#B99855 100%)",
   } },
   merlot: { label: "Merlot & Brass", c: {
     deep: "#3A1720", deep2: "#4E2029", accent: "#8C3B4A", accent2: "#B08542", gold: "#F0DCDF", soft: "#F7EDEE",
-    rose: "#C08A93", bg: "#FCF8F8", card: "#FFFFFF", ink: "#2C1319", faint: "#9B848A", line: "#EDDFE1",
+    rose: "#C08A93", bg: "#EDEBEB", card: "#F8F5F5", ink: "#2C1319", faint: "#9B848A", line: "#EDDFE1",
     metal: "linear-gradient(120deg,#8C3B4A 0%,#F0DCDF 45%,#B08542 100%)",
   } },
   sapphire: { label: "Sapphire & Pearl", c: {
     deep: "#16233F", deep2: "#23345A", accent: "#3D5A8A", accent2: "#A9B6C9", gold: "#DEE6F2", soft: "#EDF1F7",
-    rose: "#8CA0C0", bg: "#F8FAFC", card: "#FFFFFF", ink: "#1A2333", faint: "#8892A3", line: "#E1E7EF",
+    rose: "#8CA0C0", bg: "#EBECED", card: "#F6F7F8", ink: "#1A2333", faint: "#8892A3", line: "#E1E7EF",
     metal: "linear-gradient(120deg,#3D5A8A 0%,#DEE6F2 45%,#A9B6C9 100%)",
   } },
   teal: { label: "Teal & Silver", c: {
     deep: "#0E2E31", deep2: "#154448", accent: "#12939A", accent2: "#98A6AC", gold: "#D8EDEF", soft: "#EAF4F5",
-    rose: "#7FBFC5", bg: "#F7FBFB", card: "#FFFFFF", ink: "#14262A", faint: "#83969A", line: "#DCE8EA",
+    rose: "#7FBFC5", bg: "#EAECEC", card: "#F5F8F8", ink: "#14262A", faint: "#83969A", line: "#DCE8EA",
     metal: "linear-gradient(120deg,#12939A 0%,#D8EDEF 45%,#98A6AC 100%)",
   } },
   peony: { label: "Peony & Cream", c: {
     deep: "#4A2C36", deep2: "#603944", accent: "#C97B8E", accent2: "#D5B07A", gold: "#F6E3E7", soft: "#FBF0F2",
-    rose: "#E0A8B4", bg: "#FDFAFA", card: "#FFFFFF", ink: "#33212A", faint: "#A3888F", line: "#F0E2E5",
+    rose: "#E0A8B4", bg: "#EEECEC", card: "#F9F7F7", ink: "#33212A", faint: "#A3888F", line: "#F0E2E5",
     metal: "linear-gradient(120deg,#C97B8E 0%,#F6E3E7 45%,#D5B07A 100%)",
   } },
   bluegrass: { label: "Bluegrass & Bourbon", c: {
     deep: "#1F2A33", deep2: "#2F3F49", accent: "#4E7183", accent2: "#A96F3C", gold: "#E2E9ED", soft: "#EEF3F5",
-    rose: "#93AEBB", bg: "#F8FAFB", card: "#FFFFFF", ink: "#1D262C", faint: "#849199", line: "#E0E7EB",
+    rose: "#93AEBB", bg: "#EBECEC", card: "#F6F7F8", ink: "#1D262C", faint: "#849199", line: "#E0E7EB",
     metal: "linear-gradient(120deg,#4E7183 0%,#E2E9ED 45%,#A96F3C 100%)",
   } },
   dusk: { label: "Dusk & Pearl", c: {
     deep: "#2A2733", deep2: "#3A3547", accent: "#6E6488", accent2: "#C0A98C", gold: "#E7E2EE", soft: "#F1EEF5",
-    rose: "#A79BBE", bg: "#FAF9FC", card: "#FFFFFF", ink: "#262330", faint: "#8E889B", line: "#E7E3ED",
+    rose: "#A79BBE", bg: "#ECECED", card: "#F7F6F8", ink: "#262330", faint: "#8E889B", line: "#E7E3ED",
     metal: "linear-gradient(120deg,#6E6488 0%,#E7E2EE 45%,#C0A98C 100%)",
   } },
   lavender: { label: "Lavender & Eucalyptus", c: {
     deep: "#453E5C", deep2: "#574F73", accent: "#9C89B8", accent2: "#6FA8A5", gold: "#E6E0F0", soft: "#F0EDF6",
-    rose: "#B9A9CF", bg: "#FAF8FC", card: "#FFFFFF", ink: "#2F2A3D", faint: "#948DA3", line: "#E6E1EE",
+    rose: "#B9A9CF", bg: "#ECEBED", card: "#F7F6F8", ink: "#2F2A3D", faint: "#948DA3", line: "#E6E1EE",
     metal: "linear-gradient(120deg,#9C89B8 0%,#E6E0F0 45%,#6FA8A5 100%)",
   } },
 };
+
+
 const BIZ_KEYS = [["RE", BRANDS.re], ["PP", BRANDS.pp], ["VG", BRANDS.vg]];
 
 /* ================= SAMPLE DATA (fictional) ================= */
@@ -404,6 +415,8 @@ const Icon = ({ name, size = 16, color = "currentColor", stroke = 1.6 }) => {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: stroke, strokeLinecap: "round", strokeLinejoin: "round" };
   const paths = {
     message: <><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.2-.6L3 21l1.7-4.8A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4Z" /></>,
+    eye: <><path d="M2.5 12S6 5.6 12 5.6 21.5 12 21.5 12 18 18.4 12 18.4 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="3.1" /></>,
+    sms: <><path d="M12 3C6.9 3 2.8 6.6 2.8 11c0 2.5 1.3 4.7 3.4 6.2 0 1.4-.7 2.9-2 3.9 1.9.1 3.8-.5 5.3-1.6 .8.2 1.6.3 2.5.3 5.1 0 9.2-3.6 9.2-8s-4.1-8-9.2-8Z" fill="currentColor" stroke="none" /></>,
     plus: <><path d="M12 5v14M5 12h14" /></>,
     close: <><path d="M18 6 6 18M6 6l12 12" /></>,
     square: <><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M9 12h6" /></>,
@@ -971,13 +984,14 @@ export default function PaigeHQ() {
         /* Client top bar — a dark luxe band; the page title lives on the page */
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          background: `linear-gradient(100deg, ${LUXE.deep} 0%, ${LUXE.deep2} 58%, ${LUXE.deep} 100%)`,
-          borderBottom: `1px solid ${LUXE.edge}`,
-          position: "sticky", top: 0, zIndex: 40, padding: "0 6px 0 4px",
+          background: `linear-gradient(100deg, ${LUXE.deep} 0%, ${LUXE.deep2} 55%, ${LUXE.deep} 100%)`,
+          borderBottom: `1px solid ${LUXE.champagne}44`,
+          boxShadow: `inset 0 -1px 0 ${LUXE.gold}22`,
+          position: "sticky", top: 0, zIndex: 40, padding: "6px 6px 6px 4px",
         }}>
           <button onClick={() => { switchBrand("hub"); setTab("home"); }} aria-label={brandKey === "hub" ? "Home" : "Back"}
-            style={{ display: "flex", alignItems: "center", gap: 7, padding: "13px 12px", border: "none", background: "transparent",
-              color: LUXE.gold, cursor: "pointer" }}>
+            style={{ display: "flex", alignItems: "center", gap: 7, padding: "15px 13px", border: "none", background: "transparent",
+              color: LUXE.champagne, cursor: "pointer" }}>
             <span style={{ fontFamily: BRANDS.hub.display, fontSize: 16, fontWeight: 600, lineHeight: 1 }}>
               {brandKey === "hub" ? "❋" : "‹"}
             </span>
@@ -986,25 +1000,47 @@ export default function PaigeHQ() {
             )}
           </button>
 
+          <div style={{ flex: 1, minWidth: 0, textAlign: "center", padding: "0 6px" }}>
+            <div className="hq-mono" style={{ fontSize: 11.5, letterSpacing: 2.4, color: LUXE.champagne,
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 700 }}>
+              {brandKey === "hub" ? "PAIGE SWOPE-HENDERSON" : B.name}
+            </div>
+            <div className="hq-mono" style={{ fontSize: 6, letterSpacing: 1.3, color: LUXE.soft, opacity: 0.85,
+              marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {brandKey === "hub" ? "PAGEANT COACHING \u00b7 TANNING \u00b7 REAL ESTATE" : "LEXINGTON, KENTUCKY"}
+            </div>
+          </div>
+
           <button onClick={() => { switchBrand("me"); setTab("home"); }} aria-label="My Portal"
-            style={{ display: "flex", alignItems: "center", gap: 7, padding: "11px 18px 11px 14px", margin: "8px 4px", borderRadius: 999, cursor: "pointer",
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px 8px 11px", margin: "8px 4px", borderRadius: 999, cursor: "pointer",
               border: "none",
               background: brandKey === "me" ? "#FFFFFF" : `linear-gradient(100deg, ${LUXE.gold}, ${LUXE.champagne} 60%, ${LUXE.gold})`,
               color: LUXE.deep, boxShadow: "0 2px 10px rgba(0,0,0,.30)" }}>
-            <Icon name="user" size={15} stroke={2} />
-            <span className="hq-mono" style={{ fontSize: 9.5, letterSpacing: 1.6, fontWeight: 700, whiteSpace: "nowrap" }}>MY PORTAL</span>
+            <Icon name="user" size={13} stroke={2} />
+            <span className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.4, fontWeight: 700, whiteSpace: "nowrap" }}>MY PORTAL</span>
           </button>
         </div>
       ) : (
         /* Paige's portal bar — wordmark left, the things she reaches for right */
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: B.c.bg, borderBottom: `1px solid ${B.c.line}`, padding: "8px 12px", position: "sticky", top: 0, zIndex: 40, boxShadow: "0 1px 6px rgba(20,15,10,.05)" }}>
-          <span className="hq-mono" style={{ fontSize: 9, letterSpacing: 2.5, color: B.c.faint }}>
-            ✳&nbsp; PAIGE HENDERSON &mdash; HQ &nbsp;✳
-          </span>
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          background: `linear-gradient(100deg, ${B.c.deep} 0%, ${B.c.deep2} 55%, ${B.c.deep} 100%)`,
+          borderBottom: `1px solid ${B.c.gold}44`,
+          boxShadow: `inset 0 -1px 0 ${B.c.gold}22, 0 2px 8px rgba(20,15,10,.12)`,
+          padding: "7px 12px", position: "sticky", top: 0, zIndex: 40,
+        }}>
+          <div style={{ minWidth: 0 }}>
+            <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 2.4, color: B.c.gold, fontWeight: 600, whiteSpace: "nowrap" }}>
+              PAIGE HENDERSON
+            </div>
+            <div className="hq-mono" style={{ fontSize: 5.5, letterSpacing: 2, color: B.c.gold, opacity: 0.6, marginTop: 3, whiteSpace: "nowrap" }}>
+              HEADQUARTERS
+            </div>
+          </div>
 
           <button onClick={() => setSheet(sheet === "profile" ? null : "profile")} aria-label="Your profile and settings"
             style={{ width: 34, height: 34, borderRadius: "50%", overflow: "hidden", cursor: "pointer", padding: 0, margin: "7px 4px",
-              border: `1.5px solid ${sheet === "profile" ? B.c.accent : B.c.line}`, background: B.c.soft, display: "grid", placeItems: "center" }}>
+              border: `1.5px solid ${sheet === "profile" ? B.c.gold : "rgba(255,255,255,.35)"}`, background: B.c.soft, display: "grid", placeItems: "center" }}>
             <img src={PAIGE_PHOTO} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "50% 18%" }} />
           </button>
         </div>
@@ -1049,6 +1085,7 @@ export default function PaigeHQ() {
             alerts={alerts} gallery={gallery} reviews={reviews}
             onClearRequest={async (id) => { await clearRequest(id); setRequests(await loadRequests()); }}
             settings={settings}
+            onOpenPortal={(id) => setPortalId(id)}
             onOpenMessages={() => setSheet("message")}
             onCapture={(f) => setSnap(f)}
             onSyncSquare={runSquareSync}
@@ -1159,6 +1196,7 @@ function OwnerGate({ onUnlock, onExit }) {
 
   /* stage: "checking" | "account" (first time on this device) | "create" | "locked" */
   const [stage, setStage] = useState("checking");
+  const [stranded, setStranded] = useState(false);
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1170,7 +1208,15 @@ function OwnerGate({ onUnlock, onExit }) {
   useEffect(() => {
     (async () => {
       const s = await auth.currentSession();
-      if (!s) { setStage("account"); return; }
+
+      /* Once a device has a code, that code is the way in. Losing the session
+         to a rebuild should never send her back to the account screen. */
+      if (!s) {
+        if (readPin()) { setStage("locked"); setStranded(true); return; }
+        setStage("account");
+        return;
+      }
+
       /* her code lives with her settings, so it is the same on every device */
       try {
         const saved = await loadJSON("settings");
@@ -1273,6 +1319,12 @@ function OwnerGate({ onUnlock, onExit }) {
   return wrap(
     <>
       <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 3, color: hub.c.faint, marginBottom: 16 }}>{label}</div>
+
+      {stranded && (
+        <p className="hq-mono" style={{ fontSize: 7, letterSpacing: 1.2, color: hub.c.faint, lineHeight: 1.9, margin: "-8px 0 16px" }}>
+          YOUR CODE STILL WORKS. IF ANYTHING LOOKS EMPTY AFTER,<br />TAP FORGOT CODE AND SIGN IN ONCE.
+        </p>
+      )}
 
       <div style={{ display: "flex", justifyContent: "center", gap: 14, marginBottom: 8, animation: shake ? "hqShake .42s" : "none" }}>
         {[0, 1, 2, 3].map((i) => (
@@ -1530,7 +1582,7 @@ function NewsTicker({ hub, alerts = [], gallery = [], reviews = [], pageants = [
         <>
           <span style={{ color: LUXE.teal }}>♛</span>
           <span>Miss Kentucky&rsquo;s Queen registration is</span>
-          <span className="hq-mono hq-live" style={{ fontSize: 10, padding: "3px 11px 3px 8px" }}>NOW LIVE</span>
+          <span className="hq-mono hq-live" style={{ fontSize: 7.5, padding: "2px 8px 2px 6px", letterSpacing: 1.4 }}>NOW LIVE</span>
           <span style={{ color: LUXE.gold }}>&mdash; October 3, 2026</span>
         </>
       ),
@@ -1604,7 +1656,7 @@ function NewsTicker({ hub, alerts = [], gallery = [], reviews = [], pageants = [
   const run = [...items, ...items].map((it, i) => (
     <span key={it.key + "-" + i}
       onClick={() => it.go && onGo(it.go)}
-      style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 300,
+      style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10.5, fontWeight: 300,
         color: LUXE.champagne, cursor: it.go ? "pointer" : "default" }}>
       {it.node}
       <span style={{ color: LUXE.edge, margin: "0 4px" }}>◆</span>
@@ -1618,14 +1670,14 @@ function NewsTicker({ hub, alerts = [], gallery = [], reviews = [], pageants = [
       boxShadow: "0 3px 12px rgba(20,15,10,.20)",
     } : {
       /* bleed past main's padding so it runs edge to edge under the header */
-      margin: "-20px -16px 14px", padding: "5px 0 6px",
+      margin: "-20px -16px 0", padding: "3px 0 4px",
       background: `linear-gradient(180deg, ${LUXE.deep2} 0%, ${LUXE.deep} 100%)`,
       borderBottom: `1px solid ${LUXE.edge}`,
       boxShadow: "0 3px 10px rgba(20,15,10,.16)",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: owner ? 11 : 14 }}>
-        <span className="hq-mono" style={{ flexShrink: 0, fontSize: 6, letterSpacing: 1.6, color: LUXE.deep,
-          background: LUXE.gold, borderRadius: 3, padding: "3px 6px", fontWeight: 700 }}>
+        <span className="hq-mono" style={{ flexShrink: 0, fontSize: 5, letterSpacing: 1.4, color: LUXE.deep,
+          background: LUXE.gold, borderRadius: 2, padding: "2px 5px", fontWeight: 700 }}>
           {owner ? "LIVE" : "NEW"}
         </span>
         <div className="hq-ticker" style={{ flex: 1, minWidth: 0 }}>
@@ -2488,9 +2540,7 @@ function MessageSheet({ B, clients = [], settings = {}, onClose }) {
   const { input } = useBrandBits(B);
   const [find, setFind] = useState("");
   const site = clientSite(settings);
-  /* Paige's own wording — she can edit it in Settings if she wants a different one. */
-  const invite = (settings.inviteText || `Hey there!\n\nIt's Paige with Pageant Perfect & Velvet Glow! I want to invite you to my brand new booking site, where everything is all under one link. Take a look and let me know what you think! Scheduling is OPEN \u{1F90D}`).trim();
-  const generic = `${invite}\n\n${site}`;
+  const generic = inviteText(settings, null);
   const withPhones = clients.filter((c) => c.phone);
   const shown = find.trim()
     ? withPhones.filter((c) => (c.name || "").toLowerCase().includes(find.trim().toLowerCase()))
@@ -2527,7 +2577,7 @@ function MessageSheet({ B, clients = [], settings = {}, onClose }) {
           {shown.slice(0, 20).map((c) => {
             const ph = String(c.phone).replace(/\D/g, "").slice(-10);
             const first = String(c.name || "").split(" ")[0];
-            const body = `Hey ${first}!\n\nIt's Paige with Pageant Perfect & Velvet Glow! Here's your own page with me — your appointments, your notes, and booking all under one link. Take a look and let me know what you think! Scheduling is OPEN \u{1F90D}\n\n${site}/?me=${ph}`;
+            const body = inviteText(settings, c);
             return (
               <a key={c.id} href={`sms:+1${ph}?&body=${encodeURIComponent(body)}`} onClick={onClose}
                 style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 2px", borderBottom: `1px solid ${B.c.line}`, textDecoration: "none" }}>
@@ -2624,13 +2674,47 @@ const TYPE_TINT = {
   client:  { bg: "#F3F1EE", edge: "#9A8E7E", ink: "#4E463B" },
 };
 /* "Coaching (1Hour) · Regular" is Square's wording, not hers */
+/* Square spells the length into the service name — "Private Coaching · One
+   Hour". She already sees it as a small italic, so take it out of the title. */
+/* Her words, not Square's product names. */
+const SERVICE_NAME = [
+  [/glow|tan|bronz|airbrush|spray/i, "Tanning"],
+  [/coach|lesson|interview|walk|stage|pageant|prep/i, "Coaching"],
+  [/dance/i, "Dance"],
+];
+const serviceLabel = (s = "", type = "") => {
+  for (const [re, name] of SERVICE_NAME) if (re.test(s)) return name;
+  return type === "tan" ? "Tanning" : type === "dance" ? "Dance" : type === "lesson" ? "Coaching" : cleanTitle(s);
+};
+
 const cleanTitle = (s = "") => String(s)
-  .replace(/\s*·\s*(regular|standard|default|normal)\s*$/i, "")
-  .replace(/\s*\((\d+)\s*hour?s?\)/i, "")
-  .replace(/\s*\((\d+)\s*min(ute)?s?\)/i, "")
+  .replace(/\s*[·\-—]\s*(regular|standard|default|normal)\s*$/i, "")
+  .replace(/\s*[·\-—]\s*(half|one|two|three|1|2|3|\d+)\s*(hour|hr)s?\s*$/i, "")
+  .replace(/\s*[·\-—]\s*\d+\s*(min(ute)?s?|m)\s*$/i, "")
+  .replace(/\s*\(\s*\d+\s*(hour|hr)s?\s*\)/i, "")
+  .replace(/\s*\(\s*\d+\s*min(ute)?s?\s*\)/i, "")
+  .replace(/\s*[·\-—]\s*$/, "")
   .trim();
 
-const lenLabel = (m) => (m >= 60 ? `${m / 60 % 1 ? (m / 60).toFixed(1) : m / 60}H` : `${m}m`);
+/* if the name carried the length and the booking did not, read it off the name */
+const minsFromName = (s = "") => {
+  const n = String(s).toLowerCase();
+  if (/half\s*(an\s*)?hour|30\s*min/.test(n)) return 30;
+  const h = n.match(/(one|two|three|four|1|2|3|4)\s*(hour|hr)/);
+  if (h) return ({ one: 1, two: 2, three: 3, four: 4 }[h[1]] || Number(h[1]) || 1) * 60;
+  const m = n.match(/(\d+)\s*min/);
+  if (m) return Number(m[1]);
+  return 0;
+};
+
+const lenLabel = (m) => {
+  if (!m) return "";
+  if (m < 60) return `${m}m`;
+  const h = m / 60;
+  return `${Number.isInteger(h) ? h : h.toFixed(1)}h`;
+};
+
+const minToTime = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
 const tintFor = (type) => TYPE_TINT[type] || TYPE_TINT.client;
 
@@ -2656,6 +2740,148 @@ const withBreaks = (list) => {
   }
   return out;
 };
+
+/* The day drawn to scale. Blocks are as tall as they are long, gaps are
+   real space, and a line shows where she is right now. */
+function DayTimeline({ B, list, clients = [], upNext, onLog }) {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60000);
+    const vis = () => setNow(new Date());
+    document.addEventListener("visibilitychange", vis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", vis); };
+  }, []);
+
+  const mins = (t) => { const [h, m] = String(t || "0:0").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+  const real = list.filter((e) => e.time && !e.isGap);
+
+  /* what she'd otherwise open each client's record to find — shown in the block,
+     because she reads the day once and then works straight through it */
+  const who = (e) => clients.find((x) => (x.name || "").toLowerCase() === (e.clientName || "").toLowerCase());
+  const note = (e) => {
+    const c = who(e);
+    if (!c) return "";
+    return e.type === "tan"
+      ? [c.shade, c.skinNotes].filter(Boolean).join(" \u00b7 ")
+      : [c.division, c.goals].filter(Boolean).join(" \u00b7 ");
+  };
+  if (!real.length) return null;
+
+  const nowM = now.getHours() * 60 + now.getMinutes();
+  const first = Math.min(...real.map((e) => mins(e.time)));
+  const last = Math.max(...real.map((e) => mins(e.time) + (e.mins || e.durMin || 60)));
+  /* start at the hour before her first booking, or the current hour if the day is underway */
+  const from = Math.floor(Math.min(first, Math.max(first, nowM)) / 60) * 60 - 60;
+  const to = Math.ceil(last / 60) * 60 + 30;
+  const PX = 1.35;                                  /* pixels per minute */
+  const y = (m) => (m - from) * PX;
+  const height = (to - from) * PX;
+
+  const hours = [];
+  for (let h = Math.ceil(from / 60); h * 60 <= to; h++) hours.push(h);
+  const label = (h) => `${h % 12 === 0 ? 12 : h % 12}${h >= 12 ? "PM" : "AM"}`;
+
+  return (
+    <div style={{ position: "relative", height, marginTop: 6 }}>
+      {hours.map((h) => (
+        <div key={h} style={{ position: "absolute", top: y(h * 60), left: 0, right: 0, display: "flex", alignItems: "center", gap: 8 }}>
+          <span className="hq-mono" style={{ width: 34, flexShrink: 0, fontSize: 7.5, letterSpacing: 0.5, color: B.c.faint, textAlign: "right" }}>
+            {label(h)}
+          </span>
+          <span style={{ flex: 1, height: 1, background: B.c.line }} />
+        </div>
+      ))}
+
+      {real.map((e) => {
+        const t = tintFor(e.type);
+        const len = e.mins || minsFromName(e.title) || e.durMin || 60;
+        const isNext = upNext && upNext.id === e.id && upNext.kind === e.kind;
+        const past = mins(e.time) + len < nowM;
+        const tall = len * PX;
+        const c = who(e);
+        const ph = String((c && c.phone) || "").replace(/\D/g, "").slice(-10);
+        const roomy = tall > 64;
+        return (
+          <div key={e.kind + e.id}
+            style={{
+              position: "absolute", top: y(mins(e.time)) + 2, left: 46, right: 0,
+              height: Math.max(tall - 4, 36), padding: roomy ? "8px 10px" : "5px 10px",
+              display: "flex", gap: 9, alignItems: roomy ? "flex-start" : "center",
+              borderRadius: 8, background: t.bg,
+              borderLeft: `3px solid ${t.edge}`,
+              opacity: past ? 0.5 : 1,
+              boxShadow: isNext ? `0 0 0 1.5px ${t.edge}` : "none",
+              overflow: "hidden",
+            }}>
+            {/* her face, if she has one on file */}
+            {roomy && c && (c.photo
+              ? <img src={`data:image/jpeg;base64,${c.photo}`} alt="" loading="lazy"
+                  style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: `1.5px solid ${t.edge}` }} />
+              : <span style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0, background: t.edge, color: "#FFFFFF",
+                  display: "grid", placeItems: "center", fontFamily: B.display, fontSize: 15, fontWeight: 600 }}>
+                  {String(e.clientName || "?").trim().charAt(0).toUpperCase()}
+                </span>)}
+
+            <button onClick={() => onLog && onLog(e)}
+              style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+              <div style={{ fontSize: 12.5, fontWeight: 500, color: t.ink, lineHeight: 1.25 }}>
+                {cleanTitle(e.title)}
+                {len ? <span style={{ fontSize: 8.5, fontStyle: "italic", fontWeight: 300, opacity: 0.55, marginLeft: 5 }}>{lenLabel(len)}</span> : null}
+              </div>
+              {e.clientName && (
+                <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1, color: t.ink, opacity: 0.72, marginTop: 2 }}>
+                  {e.clientName.toUpperCase()}
+                </div>
+              )}
+              {roomy && note(e) && (
+                <div style={{ fontSize: 10.5, fontWeight: 300, fontStyle: "italic", color: t.ink, opacity: 0.85,
+                  marginTop: 4, lineHeight: 1.4, overflow: "hidden" }}>
+                  {note(e)}
+                </div>
+              )}
+            </button>
+
+            {/* one tap to text her */}
+            {ph && (
+              <a href={`sms:+1${ph}`} onClick={(ev) => ev.stopPropagation()} aria-label={`Text ${e.clientName}`}
+                style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 8, display: "grid", placeItems: "center",
+                  background: t.edge, color: "#FFFFFF", textDecoration: "none" }}>
+                <Icon name="message" size={15} color="#FFFFFF" />
+              </a>
+            )}
+          </div>
+        );
+      })}
+
+      {/* gaps, as the space they actually are */}
+      {real.map((e, i) => {
+        const nxt = real[i + 1];
+        if (!nxt) return null;
+        const end = mins(e.time) + (e.mins || e.durMin || 60);
+        const gap = mins(nxt.time) - end;
+        if (gap < 25) return null;
+        return (
+          <div key={"g" + i} style={{
+            position: "absolute", top: y(end) + 3, left: 46, right: 0, height: Math.max(gap * PX - 6, 20),
+            borderRadius: 8, border: `1px dashed ${B.c.line}`, display: "grid", placeItems: "center",
+          }}>
+            <span className="hq-mono" style={{ fontSize: 7, letterSpacing: 1.4, color: B.c.faint, fontStyle: "italic" }}>
+              {gap >= 60 ? `${Math.floor(gap / 60)}H${gap % 60 ? ` ${gap % 60}M` : ""} FREE` : `${gap}M FREE`}
+            </span>
+          </div>
+        );
+      })}
+
+      {/* where she is right now */}
+      {nowM >= from && nowM <= to && (
+        <div style={{ position: "absolute", top: y(nowM), left: 34, right: 0, height: 2, background: "#C0392B", zIndex: 3 }}>
+          <span style={{ position: "absolute", left: -4, top: -4, width: 10, height: 10, borderRadius: "50%", background: "#C0392B" }} />
+          <span className="hq-mono" style={{ position: "absolute", right: 2, top: -13, fontSize: 6.5, letterSpacing: 1.4, color: "#C0392B", fontWeight: 700 }}>NOW</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ================= PAIGE'S TODAY (owner dashboard) ================= */
 const HYPE_NAMES = [
@@ -2684,14 +2910,14 @@ const QUOTES = [
   { q: "Optimism is the faith that leads to achievement.", by: "Helen Keller" },
   { q: "Success is liking yourself, liking what you do, and liking how you do it.", by: "Maya Angelou" },
 ];
-function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = [], clients = [], leads = [], requests = [], busyBlocks = [], settings = {}, index = [], alerts = [], gallery = [], reviews = [], onOpenMessages, onSyncSquare, onCapture, onClearRequest, onLogVisit, onOpenCalendar, onOpenVault, onOpenClients }) {
+function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = [], clients = [], leads = [], requests = [], busyBlocks = [], settings = {}, index = [], alerts = [], gallery = [], reviews = [], onOpenPortal, onOpenMessages, onSyncSquare, onCapture, onClearRequest, onLogVisit, onOpenCalendar, onOpenVault, onOpenClients }) {
   const { input, card, H } = useBrandBits(B);
   const [todoText, setTodoText] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [logging, setLogging] = useState(null);
   const [logNote, setLogNote] = useState("");
+  const [timeline, setTimeline] = useState(() => { try { return localStorage.getItem("hq-timeline") !== "0"; } catch { return true; } });
   const camRef = useRef(null);
-  const [todoDaily, setTodoDaily] = useState(false);
   const [todoOpen, setTodoOpen] = useState(() => { try { return localStorage.getItem("hq-todo-shut") !== "1"; } catch { return true; } });
   const cd = useMkqCountdown();
     const [nick] = useState(() => HYPE_NAMES[Math.floor(Math.random() * HYPE_NAMES.length)]);
@@ -2718,6 +2944,21 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
   const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
   const isPast = (e) => nowMins > toMin(e.time) + (e.durMin || 30);
   const upNext = todayList.find((e) => !isPast(e));
+  const upClient = upNext && upNext.clientName
+    ? clients.find((c) => (c.name || "").toLowerCase() === (upNext.clientName || "").toLowerCase())
+    : null;
+  const upIn = upNext ? toMin(upNext.time) - nowMins : null;
+  const upWhen = upIn == null ? ""
+    : upIn <= 0 ? "NOW"
+    : upIn < 60 ? `IN ${upIn} MINUTES`
+    : upIn < 120 ? "IN AN HOUR"
+    : `IN ${Math.round(upIn / 60)} HOURS`;
+  /* whatever she'd otherwise open their record to find */
+  const upNotes = upClient
+    ? (upNext.type === "tan"
+        ? [upClient.shade, upClient.undertone, upClient.skinNotes].filter(Boolean).join(" · ")
+        : [upClient.division, upClient.goals].filter(Boolean).join(" · "))
+    : "";
   const dow = new Date().getDay();
   const weekStart = daysFromNow(-dow);
   const weekEnd = daysFromNow(6 - dow);
@@ -2790,8 +3031,7 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
   const prettyLong = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   const addTodo = async () => {
     if (!todoText.trim()) return;
-    await saveTodos([...todos, { id: "t" + Date.now(), text: todoText.trim(), done: false, daily: todoDaily, lastDone: "" }]);
-    setTodoDaily(false);
+    await saveTodos([...todos, { id: "t" + Date.now(), text: todoText.trim(), done: false }]);
     setTodoText("");
   };
   /* A daily item is done only if it was ticked today — tomorrow it is waiting again. */
@@ -2814,11 +3054,11 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
 
   /* built here so it can sit in a column beside the day */
   const todoPanel = (
-      <div style={{ ...card, padding: 0, marginBottom: 12, overflow: "hidden" }}>
+      <div style={{ ...card, padding: 0, marginBottom: 10, overflow: "hidden" }}>
         <button onClick={() => { const v = !todoOpen; setTodoOpen(v); try { localStorage.setItem("hq-todo-shut", v ? "0" : "1"); } catch {} }}
-          style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "11px 13px",
+          style={{ width: "100%", display: "flex", alignItems: "center", gap: 7, padding: "9px 11px",
             background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
-          <span style={{ fontFamily: B.display, fontSize: 15, fontWeight: 600, color: B.c.ink, lineHeight: 1 }}>To Do</span>
+          <span style={{ fontFamily: B.display, fontSize: 13.5, fontWeight: 600, color: B.c.ink, lineHeight: 1 }}>To Do</span>
           {openCount > 0 && (
             <span className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.2, fontWeight: 700, borderRadius: 999,
               padding: "3px 8px", background: B.c.accent, color: "#FFFFFF" }}>{openCount}</span>
@@ -2831,18 +3071,12 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
         </button>
 
         {todoOpen && (
-          <div className="hq-fade" style={{ padding: "0 13px 12px" }}>
+          <div className="hq-fade" style={{ padding: "0 11px 11px" }}>
             <div style={{ display: "flex", gap: 7, marginBottom: 10 }}>
               <input value={todoText} onChange={(e) => setTodoText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") addTodo(); }}
                 placeholder="Something to get done…"
-                style={{ flex: 1, padding: "8px 10px", fontSize: 12.5, border: `1px solid ${B.c.line}`, borderRadius: 6, boxSizing: "border-box" }} />
-              <button onClick={() => setTodoDaily(!todoDaily)} className="hq-mono hq-press" title="Repeat every day"
-                style={{ padding: "0 9px", borderRadius: 6, cursor: "pointer", fontSize: 6.5, letterSpacing: 1, fontWeight: 700,
-                  border: `1px solid ${todoDaily ? B.c.accent : B.c.line}`,
-                  background: todoDaily ? B.c.accent : "transparent", color: todoDaily ? "#FFFFFF" : B.c.faint }}>
-                DAILY
-              </button>
+                style={{ flex: 1, padding: "7px 9px", fontSize: 11.5, border: `1px solid ${B.c.line}`, borderRadius: 6, boxSizing: "border-box" }} />
               <button onClick={addTodo} disabled={!todoText.trim()} className="hq-press"
                 style={{ padding: "0 15px", borderRadius: 7, border: "none", cursor: "pointer",
                   background: todoText.trim() ? B.c.metal : "#DCD5CA", color: B.c.deep, fontSize: 16, fontWeight: 600 }}>+</button>
@@ -2850,20 +3084,15 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
 
             {todos.length === 0 && (
               <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "2px 0 0", lineHeight: 1.6 }}>
-                Nothing on the list. Tap DAILY before adding something you do every day — it comes back each morning.
+                Nothing on the list yet.
               </p>
             )}
 
-            {["daily", "once"].map((group) => {
-              const list = todos.filter((t) => (group === "daily" ? t.daily : !t.daily));
+            {[""].map((group) => {
+              const list = todos;
               if (!list.length) return null;
               return (
-                <div key={group} style={{ marginTop: group === "once" && todos.some((t) => t.daily) ? 11 : 0 }}>
-                  {todos.some((t) => t.daily) && todos.some((t) => !t.daily) && (
-                    <div className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 2, color: B.c.faint, margin: "0 0 5px" }}>
-                      {group === "daily" ? "EVERY DAY" : "ONE OFF"}
-                    </div>
-                  )}
+                <div key={group}>
                   {list.map((t) => {
                     const done = isDone(t);
                     return (
@@ -2874,13 +3103,10 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
                             background: done ? B.c.accent : "transparent", color: "#fff", fontSize: 8.5, lineHeight: 1 }}>
                           {done ? "✓" : ""}
                         </button>
-                        <span style={{ flex: 1, fontSize: 12, fontWeight: 300, lineHeight: 1.4,
+                        <span style={{ flex: 1, fontSize: 11, fontWeight: 300, lineHeight: 1.4,
                           textDecoration: done ? "line-through" : "none", color: done ? B.c.faint : B.c.ink }}>
                           {t.text}
                         </span>
-                        {t.daily && (
-                          <span className="hq-mono" style={{ fontSize: 6, letterSpacing: 1, color: B.c.accent, opacity: 0.75, flexShrink: 0 }}>DAILY</span>
-                        )}
                         <button onClick={() => saveTodos(todos.filter((x) => x.id !== t.id))} aria-label="Remove"
                           style={{ border: "none", background: "none", color: B.c.faint, fontSize: 13, padding: "2px 3px", cursor: "pointer", flexShrink: 0 }}>✕</button>
                       </div>
@@ -2949,96 +3175,210 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
         </div>
       )}
 
-      {/* what her clients are seeing right now */}
-      <NewsTicker hub={B} alerts={alerts} gallery={gallery} reviews={reviews} pageants={pageants}
-        settings={settings} onGo={() => onOpenClients && onOpenClients()} owner />
+      {/* HER DAY — the shape of it, in her colours, beside the day itself */}
+      {todoPanel}
 
-      {/* today, side by side */}
-      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 4 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>{todoPanel}</div>
-        <div style={{ ...card, flex: 1, minWidth: 0, padding: "13px 14px", borderLeft: `3px solid ${B.c.accent}` }}>
-          <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: B.c.accent, marginBottom: 6 }}>TODAY&rsquo;S SCHEDULE · {todayList.length} BOOKED</div>
+      <div style={{ display: "flex", gap: 9, alignItems: "flex-start", marginBottom: 4 }}>
+        {/* two separate boxes, half and half, beside the day */}
+        {todayList.length > 0 && (() => {
+          const real = todayList.filter((e) => e.time && !e.isGap);
+          if (!real.length) return null;
+          const mins = (t) => { const [h, m] = String(t || "0:0").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+          const lenOf = (e) => e.mins || minsFromName(e.title) || e.durMin || 60;
+          const firstAt = Math.min(...real.map((e) => mins(e.time)));
+          const lastEnd = Math.max(...real.map((e) => mins(e.time) + lenOf(e)));
+          const working = real.reduce((s2, e) => s2 + lenOf(e), 0);
+          const breaks = real.slice(0, -1).reduce((n, e, i) => {
+            const gap = mins(real[i + 1].time) - (mins(e.time) + lenOf(e));
+            return gap >= 25 ? n + 1 : n;
+          }, 0);
+          const left = real.filter((e) => !isPast(e)).length;
+          const hrs = (m) => (m % 60 === 0 ? `${m / 60}h` : `${Math.floor(m / 60)}h${m % 60}m`);
+
+          return (
+            <div style={{ flex: "0 0 27%", minWidth: 0, display: "flex", flexDirection: "column", gap: 9 }}>
+              {/* her day */}
+              <div style={{ borderRadius: 10, overflow: "hidden",
+                background: `linear-gradient(165deg, ${B.c.deep} 0%, ${B.c.deep2} 100%)`,
+                boxShadow: "0 3px 12px rgba(20,15,10,.18)" }}>
+                <div style={{ padding: "10px 11px 8px", borderBottom: "1px solid rgba(255,255,255,.16)" }}>
+                  <div className="hq-mono" style={{ fontSize: 5.5, letterSpacing: 1.6, color: B.c.gold, opacity: 0.8 }}>YOUR DAY</div>
+                  <div className="hq-mono" style={{ fontSize: 9.5, fontWeight: 700, color: "#FFFFFF", marginTop: 4, letterSpacing: 0.3, whiteSpace: "nowrap" }}>
+                    {prettyTime(minToTime(firstAt)).replace(" ", "")}
+                    <span style={{ opacity: 0.55 }}>&ndash;</span>
+                    {prettyTime(minToTime(lastEnd)).replace(" ", "")}
+                  </div>
+                </div>
+                {[
+                  [String(real.length), "booked"],
+                  [hrs(working), "working"],
+                  [String(breaks), breaks === 1 ? "break" : "breaks"],
+                  [String(left), "to go"],
+                ].map(([big, small], i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 5,
+                    padding: "6px 11px", borderTop: i ? "1px solid rgba(255,255,255,.08)" : "none" }}>
+                    <span className="hq-mono" style={{ fontSize: 5.5, letterSpacing: 0.8, color: B.c.gold, opacity: 0.72 }}>{small.toUpperCase()}</span>
+                    <span className="hq-mono" style={{ fontSize: 11.5, fontWeight: 700, color: "#FFFFFF", lineHeight: 1 }}>{big}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* the pageant, its own box */}
+              {cd && cd.diff > 0 && (
+                <div style={{ borderRadius: 10, overflow: "hidden", background: "#06070A",
+                  border: "1px solid rgba(110,193,214,.28)", boxShadow: "0 3px 12px rgba(6,7,10,.24)" }}>
+                  <img src={MKQ_LOGO} alt="Miss Kentucky's Queen" style={{ width: "100%", display: "block" }} />
+                  <div style={{ display: "flex", gap: 3, padding: "8px 7px 0" }}>
+                    {[[cd.d, "DAYS"], [cd.h, "HRS"], [cd.m, "MIN"], [cd.s, "SEC"]].map(([v, u]) => (
+                      <span key={u} style={{ flex: 1, textAlign: "center", padding: "5px 0", borderRadius: 3,
+                        background: "rgba(110,193,214,.12)", border: "1px solid rgba(110,193,214,.22)" }}>
+                        <span className="hq-mono" style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#FFFFFF", lineHeight: 1 }}>
+                          {String(v).padStart(2, "0")}
+                        </span>
+                        <span className="hq-mono" style={{ display: "block", fontSize: 4, letterSpacing: 0.6, color: "#6EC1D6", marginTop: 3 }}>{u}</span>
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* the two things she actually does with the pageant */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "7px 7px 8px" }}>
+                    <a href={`sms:&body=${encodeURIComponent(
+                        `Miss Kentucky's Queen \u2014 October 3, 2026 at Grayson County Middle School. Registration is open now: ${clientSite(settings)}/?b=mkq`
+                      )}`}
+                      className="hq-mono hq-press"
+                      style={{ display: "block", padding: "7px 0", borderRadius: 4, textAlign: "center", textDecoration: "none",
+                        background: "linear-gradient(95deg,#0E7C80,#12939A 45%,#6EC1D6)", color: "#04161A",
+                        fontSize: 6.5, letterSpacing: 1.2, fontWeight: 700 }}>
+                      SHARE THE PAGEANT
+                    </a>
+                    <a href={(settings.mkqUrl || "https://bombyhead.com/contest.php?contestid=c5224").trim()}
+                      target="_blank" rel="noreferrer" className="hq-mono hq-press"
+                      style={{ display: "block", padding: "7px 0", borderRadius: 4, textAlign: "center", textDecoration: "none",
+                        border: "1px solid rgba(110,193,214,.4)", color: "#6EC1D6",
+                        fontSize: 6.5, letterSpacing: 1.2, fontWeight: 700 }}>
+                      OPEN BOMBYHEAD
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        <div style={{ ...card, flex: 1, minWidth: 0, padding: "12px 13px", borderLeft: `3px solid ${B.c.accent}` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
+            <span className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: B.c.accent }}>
+              TODAY&rsquo;S SCHEDULE &middot; {todayList.length} BOOKED
+            </span>
+            <span style={{ flex: 1 }} />
+          </div>
           {todayList.length === 0 && <p style={{ fontSize: 13, fontWeight: 300, color: B.c.faint, margin: 0 }}>A clear day — nothing on the books.</p>}
           {withBreaks(todayList).map((e2, i) => {
-            const past = e2.isGap ? false : isPast(e2);
-            const next = !e2.isGap && upNext && upNext.id === e2.id && upNext.kind === e2.kind;
             const t = tintFor(e2.type);
+
             if (e2.isGap) return (
-              <div key={e2.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 11px", marginBottom: 6,
-                borderRadius: 8, background: t.bg, border: `1px dashed ${t.edge}` }}>
-                <span className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.2, color: t.ink }}>{prettyTime(e2.time)}</span>
-                <span style={{ flex: 1, height: 1, background: t.edge }} />
-                <span className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.2, color: t.ink, fontStyle: "italic" }}>{e2.title}</span>
+              <div key={e2.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 12px", marginBottom: 6 }}>
+                <span style={{ flex: 1, height: 1, background: B.c.line }} />
+                <span className="hq-mono" style={{ fontSize: 7, letterSpacing: 1.4, color: B.c.faint, fontStyle: "italic" }}>{e2.title}</span>
+                <span style={{ flex: 1, height: 1, background: B.c.line }} />
               </div>
             );
+
+            const past = isPast(e2);
+            const next = upNext && upNext.id === e2.id && upNext.kind === e2.kind;
+            const c = clients.find((x) => (x.name || "").toLowerCase() === (e2.clientName || "").toLowerCase());
+            const ph = String((c && c.phone) || "").replace(/\D/g, "").slice(-10);
+            const len = e2.mins || minsFromName(e2.title) || e2.durMin || 0;
+            const notes = c
+              ? (e2.type === "tan"
+                  ? [c.shade, c.skinNotes].filter(Boolean).join(" \u00b7 ")
+                  : [c.division, c.goals].filter(Boolean).join(" \u00b7 "))
+              : "";
+
             return (
-            <div key={e2.kind + e2.id} style={{
-              padding: "9px 11px", marginBottom: 6, borderRadius: 8,
-              background: t.bg, borderLeft: `3px solid ${t.edge}`,
-              opacity: past ? 0.5 : 1,
-              boxShadow: next ? `0 0 0 1.5px ${t.edge}` : "none",
-              transition: "all .3s",
-            }}>
-              <div style={{ fontSize: 13.5, fontWeight: 500, color: t.ink, lineHeight: 1.35 }}>
-                <span style={{ marginRight: 6 }}>{EVENT_TYPES[e2.type]?.mark}</span>{past ? <s style={{ textDecorationThickness: 1 }}>{e2.title}</s> : e2.title}
-                {e2.noShow && <span className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.2, color: "#B3452F", border: "1px solid #B3452F", borderRadius: 999, padding: "1px 6px", marginLeft: 6, verticalAlign: "1px", fontWeight: 700 }}>NO SHOW</span>}
-                {next && <span className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.5, color: "#FFFFFF", background: t.edge, borderRadius: 999, padding: "2px 7px", marginLeft: 7, verticalAlign: "1px", fontWeight: 700 }}>UP NEXT</span>}
-              </div>
-              <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 1, color: t.ink, opacity: 0.72, marginTop: 3 }}>
-                {prettyTime(e2.time)}{e2.clientName ? ` · ${e2.clientName.toUpperCase()}` : ""}
-              </div>
-              {(() => {
-                if (!e2.clientName || e2.type !== "tan" || !past) return null;
-                const c2 = clients.find((cl) => (cl.name || "").toLowerCase() === e2.clientName.toLowerCase());
-                const ph2 = String((c2 && c2.phone) || "").replace(/\D/g, "").slice(-10);
-                if (!ph2) return null;
-                return (
-                  <a href={`sms:+1${ph2}?&body=${encodeURIComponent(aftercareText(c2))}`} className="hq-mono hq-press"
-                    style={{ display: "inline-block", marginTop: 5, padding: "4px 10px", borderRadius: 3,
-                      border: `1px solid ${B.c.accent}`, color: B.c.accent, fontSize: 7, letterSpacing: 1.5, textDecoration: "none", fontWeight: 700 }}>
-                    SEND AFTERCARE
-                  </a>
-                );
-              })()}
-              {past && e2.clientName && !e2.logged && (
-                <button onClick={() => setLogging(e2)} className="hq-mono hq-press"
-                  style={{ display: "inline-block", marginTop: 5, marginLeft: 6, padding: "4px 10px", borderRadius: 3, cursor: "pointer",
-                    border: "none", background: B.c.metal, color: B.c.deep, fontSize: 7, letterSpacing: 1.5, fontWeight: 700 }}>
-                  LOG VISIT
-                </button>
-              )}
-              {e2.logged && (
-                <span className="hq-mono" style={{ display: "inline-block", marginTop: 5, marginLeft: 6, fontSize: 6.5, letterSpacing: 1.2, color: "#4E6B4E", fontWeight: 700 }}>LOGGED ✓</span>
-              )}
-              {(() => {
-                if (!e2.clientName) return null;
-                const c = clients.find((cl) => (cl.name || "").toLowerCase() === e2.clientName.toLowerCase());
-                if (!c) return null;
-                const bits = e2.type === "tan" ? [c.shade, c.undertone, c.skinNotes] : [c.division, c.goals];
-                const line = bits.filter(Boolean).join(" · ");
-                if (!line) return null;
-                return (
-                  <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 0.8, color: B.c.accent2 || B.c.accent, marginTop: 2, opacity: 0.9 }}>
-                    {line.toUpperCase().slice(0, 76)}
+              <div key={e2.kind + e2.id} style={{
+                display: "flex", gap: 9, padding: "9px 10px", marginBottom: 6, borderRadius: 9,
+                background: t.bg, borderLeft: `3px solid ${t.edge}`,
+                opacity: past ? 0.5 : 1,
+                boxShadow: next ? `0 0 0 1.5px ${t.edge}` : "none",
+              }}>
+                {/* her face */}
+                {c && c.photo
+                  ? <img src={`data:image/jpeg;base64,${c.photo}`} alt="" loading="lazy"
+                      style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: `1.5px solid ${t.edge}` }} />
+                  : <span style={{ width: 38, height: 38, borderRadius: "50%", flexShrink: 0, background: t.edge, color: "#FFFFFF",
+                      display: "grid", placeItems: "center", fontFamily: B.display, fontSize: 16, fontWeight: 600 }}>
+                      {String(e2.clientName || cleanTitle(e2.title) || "?").trim().charAt(0).toUpperCase()}
+                    </span>}
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
+                    <span style={{ flex: 1, minWidth: 0, fontFamily: B.display, fontSize: 15, fontWeight: 600, color: B.c.ink, lineHeight: 1.15 }}>
+                      {past ? <s style={{ textDecorationThickness: 1 }}>{e2.clientName || cleanTitle(e2.title)}</s> : (e2.clientName || cleanTitle(e2.title))}
+                    </span>
+                    {e2.clientName && (
+                      <span style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+                        {ph ? (
+                          <a href={`sms:+1${ph}`} aria-label={`Text ${e2.clientName}`} title={`Text ${e2.clientName}`}
+                            style={{ width: 25, height: 25, borderRadius: "50%", display: "grid", placeItems: "center",
+                              background: "#34C759", color: "#FFFFFF", textDecoration: "none" }}>
+                            <Icon name="sms" size={14} color="#FFFFFF" />
+                          </a>
+                        ) : (
+                          <span title="No phone number on file yet"
+                            style={{ width: 25, height: 25, borderRadius: "50%", display: "grid", placeItems: "center",
+                              background: B.c.line, color: B.c.faint }}>
+                            <Icon name="sms" size={14} color={B.c.faint} />
+                          </span>
+                        )}
+                        {c ? (
+                          <button onClick={() => onOpenPortal && onOpenPortal(c.id)} aria-label={`Open ${e2.clientName}'s page`} title="See her page"
+                            style={{ width: 25, height: 25, borderRadius: "50%", display: "grid", placeItems: "center", cursor: "pointer",
+                              border: "none", background: t.edge, color: "#FFFFFF", padding: 0 }}>
+                            <Icon name="eye" size={14} color="#FFFFFF" stroke={1.8} />
+                          </button>
+                        ) : (
+                          <span title="Not in your clients yet"
+                            style={{ width: 25, height: 25, borderRadius: "50%", display: "grid", placeItems: "center",
+                              background: B.c.line, color: B.c.faint }}>
+                            <Icon name="eye" size={14} color={B.c.faint} stroke={1.8} />
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    <span className="hq-mono" style={{ flexShrink: 0, fontSize: 8.5, letterSpacing: 0.8, color: t.ink, opacity: 0.8, fontWeight: 700 }}>
+                      {prettyTime(e2.time)}
+                    </span>
                   </div>
-                );
-              })()}
-            </div>
+
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 5, marginTop: 2 }}>
+                    <span style={{ fontSize: 11.5, fontWeight: 400, color: t.ink }}>{serviceLabel(e2.title, e2.type)}</span>
+                    {len ? <span style={{ fontSize: 9, fontStyle: "italic", fontWeight: 300, color: t.ink, opacity: 0.6 }}>{lenLabel(len)}</span> : null}
+                    {next && <span className="hq-mono" style={{ fontSize: 6, letterSpacing: 1.2, color: "#FFFFFF", background: t.edge, borderRadius: 999, padding: "2px 7px", fontWeight: 700 }}>UP NEXT</span>}
+                  </div>
+
+                  {notes && (
+                    <div style={{ fontSize: 10, fontWeight: 300, fontStyle: "italic", color: t.ink, opacity: 0.8, marginTop: 4, lineHeight: 1.45 }}>
+                      {notes}
+                    </div>
+                  )}
+
+                  {past && !e2.logged && (
+                    <button onClick={() => setLogging(e2)} className="hq-mono hq-press"
+                      style={{ marginTop: 6, padding: "4px 10px", borderRadius: 4, cursor: "pointer", border: "none",
+                        background: t.edge, color: "#FFFFFF", fontSize: 6.5, letterSpacing: 1.2, fontWeight: 700 }}>
+                      LOG VISIT
+                    </button>
+                  )}
+                  {e2.logged && (
+                    <span className="hq-mono" style={{ display: "inline-block", marginTop: 6, fontSize: 6.5, letterSpacing: 1.2, color: "#4E6B4E", fontWeight: 700 }}>LOGGED ✓</span>
+                  )}
+                </div>
+
+
+              </div>
             );
           })}
-          {busyBlocks.filter((b) => b.date === today).length > 0 && (
-            <>
-              <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 2.5, color: B.c.faint, margin: "10px 0 3px", fontWeight: 500 }}>BLOCKED OFF</div>
-              {busyBlocks.filter((b) => b.date === today).map((b, i) => (
-                <div key={"bb" + i} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "4px 0" }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint }}>Busy</span>
-                  <span className="hq-mono" style={{ fontSize: 8, color: B.c.faint, whiteSpace: "nowrap" }}>
-                    {b.allDay || !b.time ? "ALL DAY" : `${prettyTime(b.time)}${b.endTime ? ` \u2013 ${prettyTime(b.endTime)}` : ""}`}
-                  </span>
-                </div>
-              ))}
-            </>
-          )}
 
           <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 2.5, color: B.c.faint, margin: "10px 0 3px", fontWeight: 500 }}>TOMORROW · {tomorrowList.length} BOOKED</div>
           {tomorrowList.length === 0 && <p style={{ fontSize: 12, fontWeight: 300, color: B.c.faint, margin: 0 }}>Nothing yet.</p>}
@@ -3050,8 +3390,9 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
                 background: t.bg, borderLeft: `3px solid ${t.edge}`,
               }}>
                 <div style={{ fontSize: 13, fontWeight: 500, color: t.ink, lineHeight: 1.35 }}>
-                  <span style={{ marginRight: 6 }}>{EVENT_TYPES[e2.type]?.mark}</span>{cleanTitle(e2.title)}
-                  {e2.mins ? <span style={{ fontSize: 9, fontStyle: "italic", fontWeight: 300, opacity: 0.6, marginLeft: 5 }}>({lenLabel(e2.mins)})</span> : null}
+                  {e2.clientName || serviceLabel(e2.title, e2.type)}
+                  <span style={{ fontSize: 11, fontWeight: 300, opacity: 0.7, marginLeft: 6 }}>{serviceLabel(e2.title, e2.type)}</span>
+                  {(e2.mins || minsFromName(e2.title)) ? <span style={{ fontSize: 9, fontStyle: "italic", fontWeight: 300, opacity: 0.55, marginLeft: 4 }}>{lenLabel(e2.mins || minsFromName(e2.title))}</span> : null}
                 </div>
                 <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 1, color: t.ink, opacity: 0.72, marginTop: 3 }}>
                   {prettyTime(e2.time)}{e2.clientName ? ` · ${e2.clientName.toUpperCase()}` : ""}
@@ -3396,14 +3737,12 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
 
   return (
     <div className="hq-fade">
-      <InstallStrip hub={hub} />
-
       <NewsTicker hub={hub} alerts={liveAlerts} gallery={gallery} reviews={reviews} pageants={pageants} settings={settings} onGo={onGo} />
 
-      {/* Hero — editorial portrait, full bleed */}
-      <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 14, boxShadow: "0 4px 18px rgba(20,15,10,.20)" }}>
+      {/* Hero — the one confident moment on the page */}
+      <div style={{ position: "relative", overflow: "hidden", margin: "0 -16px 18px" }}>
         <img src={PAIGE_PHOTO} alt="Paige Swope-Henderson"
-          style={{ width: "100%", height: 400, objectFit: "cover", objectPosition: "50% 16%", display: "block" }} />
+          style={{ width: "100%", height: "auto", aspectRatio: "560 / 700", objectFit: "cover", objectPosition: "50% 0%", display: "block" }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, transparent 42%, rgba(20,17,14,.30) 62%, rgba(20,17,14,.90) 100%)" }} />
         <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "0 16px 16px", textAlign: "center" }}>
           <div style={{ fontFamily: hub.display, fontSize: 23, fontWeight: 600, letterSpacing: 2, color: "#FBF8F3", lineHeight: 1.1, textShadow: "0 1px 12px rgba(0,0,0,.45)" }}>PAIGE SWOPE-HENDERSON</div>
@@ -3415,14 +3754,14 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
         </div>
       </div>
 
+      <InstallStrip hub={hub} />
+
       {/* THE THREE — everything else on this page is secondary */}
-      <div id="hq-book" style={{
-        background: `linear-gradient(170deg, ${LUXE.deep} 0%, ${LUXE.deep2} 100%)`,
-        borderRadius: 14, padding: "14px 11px 12px", marginBottom: 12,
-        border: `1px solid ${LUXE.edge}`, boxShadow: "0 6px 22px rgba(20,15,10,.28)",
-      }}>
-        <div className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 3.5, color: LUXE.gold, opacity: 0.6, textAlign: "center", marginBottom: 11 }}>
-          BOOK WITH PAIGE
+      <div id="hq-book" style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 13 }}>
+          <span style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${hub.c.line})` }} />
+          <span className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 3.5, color: hub.c.faint, whiteSpace: "nowrap" }}>BOOK WITH PAIGE</span>
+          <span style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${hub.c.line}, transparent)` }} />
         </div>
 
         <div className="hq-stagger" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}>
@@ -3437,7 +3776,7 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
             <button key={c.key} onClick={() => onGo(c.key)} className="hq-press"
               style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", border: "none", cursor: "pointer",
                 padding: 0, borderRadius: 11, overflow: "hidden", background: c.bg, minHeight: 246,
-                boxShadow: "0 3px 12px rgba(0,0,0,.36)" }}>
+                boxShadow: "0 10px 30px rgba(28,25,22,.22), 0 2px 6px rgba(28,25,22,.12)" }}>
               <div style={{ textAlign: "center", padding: "10px 10px 0" }}>
                 <div style={{
                   height: 142, borderRadius: 9, overflow: "hidden",
@@ -3470,8 +3809,8 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
 
         <button onClick={() => onGo("mkq")} className="hq-press"
           style={{ width: "100%", display: "block", border: "none", cursor: "pointer", padding: 0, marginTop: 9,
-            borderRadius: 11, overflow: "hidden", background: "linear-gradient(165deg, #06070A 12%, #101A1E 100%)",
-            boxShadow: "0 3px 12px rgba(0,0,0,.36)" }}>
+            borderRadius: 12, overflow: "hidden", background: "linear-gradient(165deg, #06070A 12%, #101A1E 100%)",
+            boxShadow: "0 10px 30px rgba(28,25,22,.24), 0 2px 6px rgba(28,25,22,.12)" }}>
           <div style={{ margin: "11px 11px 0", height: 212, borderRadius: 9, overflow: "hidden",
             background: "#06070A", border: "1px solid rgba(110,193,214,.26)", padding: 10,
             boxShadow: "inset 0 1px 0 rgba(255,255,255,.06)" }}>
@@ -3493,7 +3832,7 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
           </div>
         </button>
 
-        <div className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.6, color: LUXE.soft, textAlign: "center", marginTop: 11, lineHeight: 2 }}>
+        <div className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.6, color: hub.c.faint, textAlign: "center", marginTop: 13, lineHeight: 2 }}>
           MISS KENTUCKY&rsquo;S QUEEN &middot; OCTOBER 3, 2026<br />
           DIRECTED BY PAIGE HENDERSON &amp; CHANDRA HORNBACK
         </div>
@@ -3602,7 +3941,7 @@ const SettingHead = ({ B, children, note, first }) => (
 );
 
 const panelStyle = (B) => ({
-  background: "#FFFFFF",
+  background: B.c.card,
   border: `1px solid ${B.c.line}`,
   borderRadius: 12,
   padding: 16,
@@ -4210,7 +4549,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
           Send this to anyone; personal links live on each client's record under Clients.
         </p>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <a href={`sms:&body=${encodeURIComponent(`Here's your own page with me — your appointments, your notes, and booking all in one spot. Just enter your phone number: ${clientSite(settings)}`)}`}
+          <a href={`sms:&body=${encodeURIComponent(inviteText(settings, null))}`}
             className="hq-mono hq-press"
             style={{ flex: 1.3, padding: "13px 0", borderRadius: 6, textAlign: "center", textDecoration: "none",
               background: B.c.metal, color: B.c.deep, fontSize: 9.5, letterSpacing: 2, fontWeight: 700 }}>
