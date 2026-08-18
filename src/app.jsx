@@ -22,9 +22,9 @@ const BRANDS = {
     key: "hub", name: "PAIGE SWOPE-HENDERSON", sub: "Pageant coaching · Custom tanning", byline: "LEXINGTON, KENTUCKY", mark: "❋", short: "HOME",
     display: "'Cormorant Garamond', Georgia, serif",
     c: {
-      deep: "#1C1A18", deep2: "#2A2724", accent: "#A8927A", gold: "#E9DFD2", soft: "#F1ECE4",
-      rose: "#C4A990", bg: "#F7F3EC", card: "#FFFFFF", ink: "#1C1916", faint: "#8A8279", line: "#EBE4D9",
-      metal: "linear-gradient(120deg,#8A7358 0%,#E9DFD2 45%,#A8927A 100%)",
+      deep: "#6259A4", deep2: "#7B72BE", accent: "#8F86CC", gold: "#F3F0FC", soft: "#F2F0FC",
+      rose: "#E0B183", bg: "#FBFAFD", card: "#FFFFFF", ink: "#2A2440", faint: "#6E6885", line: "#E9E6F0",
+      metal: "linear-gradient(120deg,#8F86CC 0%,#F3F0FC 45%,#E0B183 100%)",
     },
     services: [], hours: [],
   },
@@ -150,11 +150,11 @@ BRANDS.me = { ...BRANDS.hub, key: "me", name: "MY PORTAL", sub: "", byline: "YOU
    Velvet Glow's espresso and copper, and MKQ's teal. A deep plum-brown
    that all three sit against without fighting. */
 const LUXE = {
-  deep: "#33333A",
-  deep2: "#45444E",
-  edge: "#5A5964",
-  gold: "#E4B98A",
-  champagne: "#F0D9BC",
+  deep: "#6259A4",
+  deep2: "#7B72BE",
+  edge: "#8F86CC",
+  gold: "#E0B183",
+  champagne: "#F5E4D2",
   copper: "#B0764A",
   teal: "#6EC1D6",
   rose: "#D9A882",
@@ -730,22 +730,53 @@ export default function PaigeHQ() {
     }
   };
 
-  const runSquareSync = async () => {
+  /* Quiet version for the automatic runs — no toast unless something arrives. */
+  const runSquareSync = async (quiet) => {
     if (syncing) return;
     setSyncing(true);
     try {
       const r = await fetch("/api/square?sync=1");
       const j = await r.json();
       if (j.ok) {
-        const moved = (j.added || 0) + (j.updated || 0) + (j.paid || 0);
-        toast(moved ? `Square · ${j.added || 0} new, ${j.updated || 0} updated${j.paid ? `, ${j.paid} paid` : ""}` : "Square · up to date");
+        const added = j.added || 0;
+        if (!quiet) {
+          const moved = added + (j.updated || 0) + (j.paid || 0);
+          toast(moved ? `Square · ${added} new, ${j.updated || 0} updated${j.paid ? `, ${j.paid} paid` : ""}` : "Square · up to date");
+        } else if (added) {
+          toast(`${added} new booking${added === 1 ? "" : "s"} from Square`);
+        }
         setSyncTick((n) => n + 1);
-      } else {
+      } else if (!quiet) {
         toast(j.error ? String(j.error).slice(0, 60) : "Couldn't reach Square", "bad");
       }
-    } catch { toast("Couldn't reach Square", "bad"); }
+    } catch { if (!quiet) toast("Couldn't reach Square", "bad"); }
     setSyncing(false);
   };
+
+  /* Bookings should appear here without her tapping anything: once on open,
+     again whenever she comes back to the app, and every five minutes while it is
+     in front of her. */
+  useEffect(() => {
+    if (mode !== "paige" || !unlocked) return;
+    let last = 0;
+    const go = () => {
+      if (document.hidden) return;
+      const now = Date.now();
+      if (now - last < 60000) return;        /* never hammer it */
+      last = now;
+      runSquareSync(true);
+    };
+    const t = setTimeout(go, 1200);          /* just after the app settles */
+    const id = setInterval(go, 5 * 60000);
+    const onVis = () => { if (!document.hidden) go(); };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onVis);
+    return () => {
+      clearTimeout(t); clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onVis);
+    };
+  }, [mode, unlocked]);
 
   const portalTheme = settings.portalTheme || "blush";
   /* Keep this object stable. It feeds useBrandBits, and if it changes identity
@@ -963,8 +994,12 @@ export default function PaigeHQ() {
           }} />
       )}
 
+      {mode === "paige" && sheet === "blast" && (
+        <BroadcastSheet B={B} clients={clients} settings={settings} onClose={() => setSheet(null)} />
+      )}
+
       {mode === "paige" && sheet === "message" && (
-        <MessageSheet B={B} clients={clients} settings={settings} onClose={() => setSheet(null)} />
+        <MessageSheet B={B} clients={clients} settings={settings} onGroup={() => setSheet("blast")} onClose={() => setSheet(null)} />
       )}
       {mode === "paige" && sheet === "profile" && (
         <ProfileSheet B={B} settings={settings} saveSettings={saveSettings}
@@ -2429,6 +2464,128 @@ const CountdownPill = ({ cd }) => (
   </div>
 );
 
+/* ================= SEND TO A GROUP =================
+   iOS will not let a web app send texts by itself, and a group text would
+   put every client in one thread together. So this walks her through them
+   one tap at a time, each message greeting that person by name, and keeps
+   her place so she can stop and come back. */
+function BroadcastSheet({ B, clients = [], settings = {}, onClose }) {
+  const { input } = useBrandBits(B);
+  const [who, setWho] = useState("VG");
+  const [body, setBody] = useState("");
+  const [sent, setSent] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("hq-blast-sent") || "[]"); } catch { return []; }
+  });
+
+  const GROUPS = [
+    ["VG", "\u2726 Tanning", (c) => c.biz && c.biz.VG],
+    ["PP", "\u265B Pageant", (c) => c.biz && c.biz.PP],
+    ["MKQ", "\u265B Miss KY's Queen", (c) => c.biz && c.biz.MKQ],
+    ["all", "Everyone", () => true],
+  ];
+  const pick = GROUPS.find((g) => g[0] === who) || GROUPS[0];
+  const list = clients
+    .filter((c) => c.phone && pick[2](c))
+    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+  const done = list.filter((c) => sent.includes(c.id)).length;
+
+  const mark = (id) => {
+    const next = sent.includes(id) ? sent : [...sent, id];
+    setSent(next);
+    try { localStorage.setItem("hq-blast-sent", JSON.stringify(next.slice(-400))); } catch {}
+  };
+
+  const messageFor = (c) => {
+    const first = String(c.name || "").split(" ")[0];
+    const text = body.trim() || "";
+    /* her own greeting if she wrote one, otherwise open with their name */
+    return /^(hey|hi|hello)\b/i.test(text)
+      ? text.replace(/^(hey|hi|hello)\b[^,!\n]*/i, `Hey ${first}`)
+      : `Hey ${first}!\n\n${text}`;
+  };
+
+  return (
+    <SheetShell B={B} onClose={onClose}>
+      <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: B.c.accent, marginBottom: 4 }}>SEND TO A GROUP</div>
+      <p style={{ fontSize: 12, fontWeight: 300, color: B.c.faint, margin: "0 0 12px", lineHeight: 1.6 }}>
+        Each person gets their own message with their name in it &mdash; nobody sees anyone else.
+      </p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginBottom: 11 }}>
+        {GROUPS.map(([k, label, test]) => {
+          const n = clients.filter((c) => c.phone && test(c)).length;
+          const on = who === k;
+          return (
+            <button key={k} onClick={() => setWho(k)} className="hq-press"
+              style={{ display: "flex", alignItems: "baseline", gap: 6, padding: "9px 10px", borderRadius: 8, cursor: "pointer",
+                border: `1px solid ${on ? B.c.accent : B.c.line}`, background: on ? B.c.soft : B.c.card, textAlign: "left" }}>
+              <span style={{ flex: 1, fontSize: 11.5, fontWeight: on ? 600 : 400, color: B.c.ink }}>{label}</span>
+              <span className="hq-mono" style={{ fontSize: 9, color: B.c.faint }}>{n}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <textarea value={body} onChange={(e) => setBody(e.target.value)}
+        placeholder={"What do you want to tell them?\n\ne.g. Tandem dates just opened for September \u2014 book yours before they go!"}
+        style={{ ...input, minHeight: 96, marginBottom: 10, lineHeight: 1.55 }} />
+
+      {list.length === 0 ? (
+        <Empty B={B} mark="\u2726" title="Nobody in this group yet"
+          body="They need a phone number on file. Tick Pageant or Glow on a client to sort them." />
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
+            <span className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.4, color: B.c.faint }}>
+              {done} OF {list.length} SENT
+            </span>
+            <span style={{ flex: 1, height: 4, borderRadius: 4, background: B.c.line, overflow: "hidden" }}>
+              <span style={{ display: "block", height: "100%", width: `${Math.round((done / list.length) * 100)}%`, background: B.c.accent, transition: "width .3s" }} />
+            </span>
+            {done > 0 && (
+              <button onClick={() => { setSent([]); try { localStorage.removeItem("hq-blast-sent"); } catch {} }}
+                className="hq-mono" style={{ border: "none", background: "none", color: B.c.faint, fontSize: 7, letterSpacing: 1, cursor: "pointer" }}>
+                RESET
+              </button>
+            )}
+          </div>
+
+          <div style={{ maxHeight: "42vh", overflowY: "auto" }}>
+            {list.map((c) => {
+              const ph = String(c.phone).replace(/\D/g, "").slice(-10);
+              const already = sent.includes(c.id);
+              return (
+                <a key={c.id} href={`sms:+1${ph}?&body=${encodeURIComponent(messageFor(c))}`}
+                  onClick={() => mark(c.id)}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 2px",
+                    borderBottom: `1px solid ${B.c.line}`, textDecoration: "none", opacity: already ? 0.45 : 1 }}>
+                  {c.photo
+                    ? <img src={`data:image/jpeg;base64,${c.photo}`} alt="" loading="lazy"
+                        style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                    : <span style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0, background: B.c.soft, color: B.c.accent,
+                        display: "grid", placeItems: "center", fontSize: 12 }}>{c.biz?.VG ? "\u2726" : "\u265B"}</span>}
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 400, color: B.c.ink,
+                    textDecoration: already ? "line-through" : "none" }}>{c.name}</span>
+                  <span className="hq-mono" style={{ flexShrink: 0, fontSize: 7.5, letterSpacing: 1.2, fontWeight: 700,
+                    color: already ? "#4E6B4E" : "#FFFFFF", background: already ? "transparent" : "#34C759",
+                    borderRadius: 999, padding: already ? 0 : "4px 10px" }}>
+                    {already ? "SENT \u2713" : "SEND"}
+                  </span>
+                </a>
+              );
+            })}
+          </div>
+
+          <p className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.1, color: B.c.faint, textAlign: "center", marginTop: 10, lineHeight: 1.9 }}>
+            TAP A NAME &rarr; MESSAGES OPENS WITH IT WRITTEN &rarr; HIT SEND &rarr; COME BACK<br />
+            YOUR PLACE IS KEPT IF YOU STOP PARTWAY
+          </p>
+        </>
+      )}
+    </SheetShell>
+  );
+}
+
 /* ================= SNAP → FILE IT (her portal) =================
    One photo, then she says where it belongs. Receipts land in the
    Tax Vault tagged to a business; anything else lands in a gallery. */
@@ -2536,7 +2693,7 @@ const SheetShell = ({ B, children, onClose }) => (
   </div>
 );
 
-function MessageSheet({ B, clients = [], settings = {}, onClose }) {
+function MessageSheet({ B, clients = [], settings = {}, onGroup, onClose }) {
   const { input } = useBrandBits(B);
   const [find, setFind] = useState("");
   const site = clientSite(settings);
@@ -2559,13 +2716,20 @@ function MessageSheet({ B, clients = [], settings = {}, onClose }) {
         OPEN MESSAGES
       </a>
 
-      <button
-        onClick={async () => { try { await navigator.clipboard.writeText(site); toast("Link copied"); onClose(); } catch {} }}
-        className="hq-mono hq-press"
-        style={{ width: "100%", marginTop: 9, padding: "13px 0", borderRadius: 8, cursor: "pointer",
-          border: `1px solid ${B.c.line}`, background: "none", color: B.c.faint, fontSize: 9.5, letterSpacing: 2, fontWeight: 700 }}>
-        COPY THE LINK INSTEAD
-      </button>
+      <div style={{ display: "flex", gap: 8, marginTop: 9 }}>
+        <button onClick={() => onGroup && onGroup()} className="hq-mono hq-press"
+          style={{ flex: 1, padding: "13px 0", borderRadius: 8, cursor: "pointer",
+            border: `1px solid ${B.c.accent}`, background: "none", color: B.c.accent, fontSize: 9, letterSpacing: 1.6, fontWeight: 700 }}>
+          SEND TO A GROUP
+        </button>
+        <button
+          onClick={async () => { try { await navigator.clipboard.writeText(site); toast("Link copied"); onClose(); } catch {} }}
+          className="hq-mono hq-press"
+          style={{ flex: 1, padding: "13px 0", borderRadius: 8, cursor: "pointer",
+            border: `1px solid ${B.c.line}`, background: "none", color: B.c.faint, fontSize: 9, letterSpacing: 1.6, fontWeight: 700 }}>
+          COPY THE LINK
+        </button>
+      </div>
 
       {withPhones.length > 0 && (
         <>
@@ -3949,6 +4113,103 @@ const panelStyle = (B) => ({
   boxShadow: "0 2px 10px rgba(20,15,10,.05)",
 });
 
+/* ---------- a square she can post ----------
+   Draws the photo, her brand lockup and the caption onto a 1080 canvas,
+   then hands it to the phone's share sheet. Falls back to a download. */
+const SHARE_LOOK = {
+  glow: { logo: () => VG_LOGO, ink: "#F6E4D8", sub: "#D9A88E", bar: "#2A1810", tag: "VELVET GLOW" },
+  win:  { logo: () => PP_LOGO, ink: "#FFFFFF", sub: "#CFCFD6", bar: "#08080A", tag: "PAGEANT PERFECT" },
+  mkq:  { logo: () => MKQ_LOGO, ink: "#FFFFFF", sub: "#6EC1D6", bar: "#06070A", tag: "MISS KENTUCKY'S QUEEN" },
+};
+
+const loadImg = (srcStr) => new Promise((res, rej) => {
+  const im = new Image();
+  im.onload = () => res(im);
+  im.onerror = rej;
+  im.src = srcStr;
+});
+
+async function makeShareCard({ kind = "glow", photo, title = "", sub = "", site = "" }) {
+  const look = SHARE_LOOK[kind] || SHARE_LOOK.glow;
+  const S = 1080;
+  const cv = document.createElement("canvas");
+  cv.width = S; cv.height = S;
+  const g = cv.getContext("2d");
+
+  g.fillStyle = look.bar;
+  g.fillRect(0, 0, S, S);
+
+  /* the photo fills the square, cropped from the centre */
+  if (photo) {
+    try {
+      const im = await loadImg(photo);
+      const scale = Math.max(S / im.width, S / im.height);
+      const w = im.width * scale, h = im.height * scale;
+      g.drawImage(im, (S - w) / 2, (S - h) / 2, w, h);
+    } catch {}
+  }
+
+  /* a gradient so the type always reads, whatever the photo */
+  const grad = g.createLinearGradient(0, S * 0.45, 0, S);
+  grad.addColorStop(0, "rgba(0,0,0,0)");
+  grad.addColorStop(0.55, "rgba(0,0,0,.55)");
+  grad.addColorStop(1, "rgba(0,0,0,.88)");
+  g.fillStyle = grad;
+  g.fillRect(0, S * 0.45, S, S * 0.55);
+
+  /* her lockup, bottom left */
+  try {
+    const lg = await loadImg(look.logo());
+    const lw = 300;
+    const lh = lg.height * (lw / lg.width);
+    g.globalAlpha = 0.96;
+    g.drawImage(lg, 64, S - 64 - lh, lw, lh);
+    g.globalAlpha = 1;
+  } catch {}
+
+  /* what it is */
+  if (title) {
+    g.fillStyle = look.ink;
+    g.font = "600 62px Georgia, 'Times New Roman', serif";
+    g.textAlign = "right";
+    g.fillText(title.slice(0, 26), S - 64, S - 148);
+  }
+  if (sub) {
+    g.fillStyle = look.sub;
+    g.font = "300 34px Georgia, 'Times New Roman', serif";
+    g.textAlign = "right";
+    g.fillText(sub.slice(0, 40), S - 64, S - 100);
+  }
+
+  /* a hairline and the address */
+  g.strokeStyle = look.sub;
+  g.globalAlpha = 0.5;
+  g.beginPath(); g.moveTo(S - 64 - 220, S - 78); g.lineTo(S - 64, S - 78); g.stroke();
+  g.globalAlpha = 1;
+  g.fillStyle = look.sub;
+  g.font = "500 22px ui-monospace, Menlo, monospace";
+  g.textAlign = "right";
+  g.fillText(String(site).replace(/^https?:\/\//, "").toUpperCase(), S - 64, S - 44);
+
+  return new Promise((res) => cv.toBlob((b) => res(b), "image/jpeg", 0.92));
+}
+
+async function shareCard(opts) {
+  const blob = await makeShareCard(opts);
+  if (!blob) throw new Error("Could not make the image");
+  const file = new File([blob], `${(opts.title || "paige").replace(/\W+/g, "-").toLowerCase()}.jpg`, { type: "image/jpeg" });
+  /* the phone's own share sheet, if it will take a picture */
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    await navigator.share({ files: [file] });
+    return "shared";
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = file.name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return "saved";
+}
+
 /* ================= SETTINGS (Paige only) ================= */
 function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAlerts, settings = {}, saveSettings, exportAll, importAll, reviews = [], saveReviews, gallery = [], saveGallery, clients = [], saveClients, requests = [], pageants = [], savePageants }) {
   const { Field, input, Primary, Ghost, chip, card, H } = useBrandBits(B);
@@ -4630,6 +4891,26 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
                             : String(g.title || "").toUpperCase()}
                         </span>
                       </span>
+                      <button onClick={async () => {
+                          try {
+                            const id = kind === "glow" ? (g.afterId || g.beforeId) : g.photoId;
+                            const raw = id ? await loadJSON("gallery-img:" + id) : null;
+                            const how = await shareCard({
+                              kind,
+                              photo: raw ? `data:image/jpeg;base64,${raw}` : "",
+                              title: kind === "glow" ? (g.caption || "Fresh glow") : (g.name || ""),
+                              sub: kind === "glow" ? (g.shade || "Custom airbrush tanning") : (g.title || ""),
+                              site: clientSite(settings),
+                            });
+                            toast(how === "shared" ? "Ready to post" : "Saved to your photos");
+                          } catch { toast("Could not make that one", "bad"); }
+                        }}
+                        className="hq-mono hq-press" aria-label="Make a post"
+                        style={{ flexShrink: 0, padding: "5px 10px", borderRadius: 4, cursor: "pointer",
+                          border: `1px solid ${colour}`, background: "transparent", color: colour,
+                          fontSize: 7, letterSpacing: 1.2, fontWeight: 700 }}>
+                        SHARE
+                      </button>
                       <button onClick={() => remove(g)} aria-label="Remove"
                         style={{ border: "none", background: "none", color: B.c.faint, fontSize: 13, cursor: "pointer", padding: 4 }}>✕</button>
                     </div>
