@@ -1139,7 +1139,7 @@ export default function PaigeHQ() {
         {tab === "settings" && mode === "paige" && (
           <SettingsTab B={B} bizCfg={bizCfg} saveBizCfg={saveBizCfg} leads={leads} saveLeads={saveLeads} alerts={alerts} saveAlerts={saveAlerts}
             settings={settings} saveSettings={saveSettings} exportAll={exportAll} importAll={importAll} reviews={reviews} saveReviews={saveReviews}
-            gallery={gallery} saveGallery={saveGallery} clients={clients} saveClients={saveClients} requests={requests} pageants={pageants} savePageants={savePageants} />
+            gallery={gallery} saveGallery={saveGallery} clients={clients} saveClients={saveClients} events={events} requests={requests} pageants={pageants} savePageants={savePageants} />
         )}
         {tab === "home" && (brandKey === "hub"
           ? <HubHome onGo={(k) => { switchBrand(k); setTab("home"); }} mkqLive={mkqLive} mkqDate={mkqSource?.date} daysToMkq={daysToMkq}
@@ -4211,7 +4211,7 @@ async function shareCard(opts) {
 }
 
 /* ================= SETTINGS (Paige only) ================= */
-function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAlerts, settings = {}, saveSettings, exportAll, importAll, reviews = [], saveReviews, gallery = [], saveGallery, clients = [], saveClients, requests = [], pageants = [], savePageants }) {
+function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAlerts, settings = {}, saveSettings, exportAll, importAll, reviews = [], saveReviews, gallery = [], saveGallery, clients = [], saveClients, events = [], requests = [], pageants = [], savePageants }) {
   const { Field, input, Primary, Ghost, chip, card, H } = useBrandBits(B);
   const defFor = (k) => ({ services: BRANDS[k].services.map((s) => ({ ...s })), hours: BRANDS[k].hours.map((h) => [...h]) });
   const [bk, setBk] = useState("pp");
@@ -4227,6 +4227,8 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
   const [exporting, setExporting] = useState(false);
   const [siteCopied, setSiteCopied] = useState(false);
   const [sqBusy, setSqBusy] = useState(false);
+  const [sortBusy, setSortBusy] = useState(false);
+  const [sortMsg, setSortMsg] = useState("");
   const [sqAllBusy, setSqAllBusy] = useState(false);
   const [sqAllMsg, setSqAllMsg] = useState("");
   const [sqMsg, setSqMsg] = useState("");
@@ -4684,7 +4686,63 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
           {sqBusy ? "WORKING\u2026" : "IMPORT MY SQUARE CLIENTS"}
         </button>
         <p className="hq-mono" style={{ fontSize: 7, letterSpacing: 1.2, color: B.c.faint, textAlign: "center", marginTop: 9, lineHeight: 1.8 }}>
-          THEY COME IN UNTAGGED \u2014 TICK PAGEANT OR GLOW AS YOU GO
+          THEN SORT THEM BELOW
+        </p>
+      </div>
+
+      {/* work out who is who from what they have booked */}
+      <SettingHead B={B} note="Reads what each client has actually booked and ticks Tanning or Pageant for them.">Sort Them Automatically</SettingHead>
+      <div style={{ ...panelStyle(B) }}>
+        <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 11px", lineHeight: 1.6 }}>
+          A client who has booked a glow becomes Tanning, a lesson becomes Pageant, and someone who
+          has done both gets both. Anyone you have already ticked by hand is left alone.
+        </p>
+        {sortMsg && (
+          <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.4, color: B.c.accent, marginBottom: 9, lineHeight: 1.8 }}>{sortMsg}</div>
+        )}
+        <button onClick={async () => {
+            if (sortBusy) return;
+            setSortBusy(true); setSortMsg("READING THEIR BOOKINGS\u2026");
+            try {
+              const norm = (s) => String(s || "").trim().toLowerCase();
+              const isTan = (s) => /glow|tan|bronz|airbrush|spray/i.test(s || "");
+              const isLesson = (s) => /coach|lesson|interview|walk|stage|pageant|prep/i.test(s || "");
+
+              let tagged = 0, both = 0;
+              const next = clients.map((c) => {
+                /* leave anything she has already decided */
+                if (c.biz && (c.biz.PP || c.biz.VG)) return c;
+
+                const mine = events.filter((e) => norm(e.clientName) === norm(c.name));
+                const hist = c.history || [];
+                const words = [...mine.map((e) => e.title), ...hist.map((v) => v.service)];
+                const tan = words.some(isTan) || mine.some((e) => e.type === "tan");
+                const les = words.some(isLesson) || mine.some((e) => e.type === "lesson");
+                if (!tan && !les) return c;
+
+                tagged++;
+                if (tan && les) both++;
+                return { ...c, biz: { ...c.biz, VG: tan, PP: les } };
+              });
+
+              if (tagged) await saveClients(next);
+              setSortMsg(tagged
+                ? `${tagged} SORTED \u00b7 ${both} DO BOTH \u00b7 ${clients.length - tagged} LEFT AS THEY WERE`
+                : "NOTHING TO SORT \u2014 EVERYONE IS EITHER TICKED ALREADY OR HAS NO BOOKINGS YET");
+              if (tagged) toast(`${tagged} clients sorted`);
+            } catch {
+              setSortMsg("COULD NOT SORT THEM \u2014 TRY AGAIN");
+            }
+            setSortBusy(false);
+          }}
+          disabled={sortBusy}
+          className="hq-mono hq-press"
+          style={{ width: "100%", padding: "13px 0", borderRadius: 7, border: "none", cursor: sortBusy ? "default" : "pointer",
+            background: sortBusy ? "#CBC2B4" : B.c.metal, color: B.c.deep, fontSize: 9.5, letterSpacing: 2, fontWeight: 700 }}>
+          {sortBusy ? "WORKING\u2026" : "SORT MY CLIENTS"}
+        </button>
+        <p className="hq-mono" style={{ fontSize: 7, letterSpacing: 1.2, color: B.c.faint, textAlign: "center", marginTop: 9, lineHeight: 1.8 }}>
+          SAFE TO RUN AGAIN AFTER EVERY SQUARE IMPORT
         </p>
       </div>
 
