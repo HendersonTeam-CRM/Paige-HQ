@@ -4295,11 +4295,36 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
   const saveAll = async () => { await saveBizCfg(draft); setSaved(true); toast("Prices and hours saved"); setTimeout(() => setSaved(false), 2200); };
   const restore = () => setDraft({ ...draft, [bk]: defFor(bk) });
 
-  const addAlert = async () => {
-    if (!alertForm.text.trim()) return;
-    await saveAlerts([{ id: "a" + Date.now(), text: alertForm.text.trim(), target: alertForm.target, expires: alertForm.expires || "", date: ymd() }, ...alerts]);
+  /* Posting puts a banner on their home page. Notifying also buzzes the
+     phones of clients who turned notifications on — never automatic. */
+  const addAlert = async (alsoNotify) => {
+    const text = alertForm.text.trim();
+    if (!text) return;
+    const alert = { id: "a" + Date.now(), text, target: alertForm.target, expires: alertForm.expires || "", date: ymd() };
+    await saveAlerts([alert, ...alerts]);
     setAlertForm({ text: "", target: "ALL", expires: "" });
-    toast("Posted to your clients");
+
+    if (!alsoNotify) { toast("Posted to your clients"); return; }
+
+    try {
+      const r = await fetch("/api/push", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "broadcast",
+          audience: alert.target,
+          title: alert.target === "PP" ? "Pageant Perfect" : alert.target === "VG" ? "Velvet Glow" : "Paige Henderson",
+          body: text.slice(0, 120),
+          url: clientSite(settings),
+          key: alert.id,                 /* so a retry never sends twice */
+        }),
+      });
+      const j = await r.json();
+      /* Only say it went out if the server says it went out. */
+      if (j && j.ok) toast(j.sent ? `Posted \u00b7 ${j.sent} phone${j.sent === 1 ? "" : "s"} buzzed` : "Posted \u00b7 nobody has notifications on yet");
+      else toast("Posted \u2014 but the notification didn't send", "bad");
+    } catch {
+      toast("Posted \u2014 but the notification didn't send", "bad");
+    }
   };
 
   return (
@@ -4364,6 +4389,130 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
         <Primary onClick={saveAll} style={{ flex: 1.4 }}>{saved ? "Saved ✓" : "Save changes"}</Primary>
         <Ghost onClick={restore} style={{ flex: 1, textAlign: "center" }}>Restore {br.mark} defaults</Ghost>
       </div>
+
+      {/* Bundles & memberships */}
+      <SettingHead B={B} note="Every offer starts as a draft. Tick Live only when its Square link works — that is what clients pay through.">Bundles &amp; Memberships</SettingHead>
+      <div style={{ ...panelStyle(B) }}>
+        {(() => {
+          const list = (offers && offers.length ? offers : DEFAULT_OFFERS);
+          const liveCount = list.filter((o) => o.live).length;
+          const groups = [
+            ["first", "First-time offers"],
+            ["bundle", "Prepaid bundles"],
+            ["membership", "Membership"],
+          ];
+          const setOne = async (id, patch) => {
+            const next = list.map((o) => (o.id === id ? { ...o, ...patch } : o));
+            await saveOffers(next);
+          };
+
+          return (
+            <>
+              <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 12px", lineHeight: 1.6 }}>
+                {liveCount === 0
+                  ? "Nothing is showing to clients yet. Paste a Square checkout link on an offer, then tick Live."
+                  : `${liveCount} of ${list.length} showing in the client portal.`}
+              </p>
+
+              {groups.map(([type, label]) => {
+                const mine = list.filter((o) => o.type === type);
+                if (!mine.length) return null;
+                return (
+                  <div key={type} style={{ marginBottom: 14 }}>
+                    <div className="hq-mono" style={{ fontSize: 7, letterSpacing: 2, color: B.c.accent, fontWeight: 700, marginBottom: 7 }}>
+                      {label.toUpperCase()}
+                    </div>
+
+                    {mine.map((o) => {
+                      const open = offerOpen === o.id;
+                      const ready = !!String(o.squareUrl || "").trim();
+                      return (
+                        <div key={o.id} style={{ border: `1px solid ${o.live ? B.c.accent : B.c.line}`, borderRadius: 9, marginBottom: 7, overflow: "hidden" }}>
+                          <button onClick={() => setOfferOpen(open ? "" : o.id)}
+                            style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "10px 11px",
+                              background: o.live ? B.c.soft : "transparent", border: "none", cursor: "pointer", textAlign: "left" }}>
+                            <span style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: B.c.ink, lineHeight: 1.25 }}>
+                                {o.name}
+                                {o.service !== "mixed" && (
+                                  <span style={{ fontWeight: 300, opacity: 0.7 }}> &middot; {serviceName(o.service)}</span>
+                                )}
+                              </span>
+                              <span className="hq-mono" style={{ display: "block", fontSize: 7.5, letterSpacing: 0.8, color: B.c.faint, marginTop: 3 }}>
+                                {offerMoney(o.price)}
+                                {o.type === "membership" ? " / MONTH" : ""}
+                                {o.saves > 0 ? ` \u00b7 SAVES ${offerMoney(o.saves)} (${o.discount}%)` : ""}
+                              </span>
+                            </span>
+                            <span className="hq-mono" style={{ flexShrink: 0, fontSize: 6.5, letterSpacing: 1, fontWeight: 700, borderRadius: 999,
+                              padding: "3px 8px",
+                              background: o.live ? B.c.accent : "transparent",
+                              color: o.live ? "#FFFFFF" : B.c.faint,
+                              border: o.live ? "none" : `1px solid ${B.c.line}` }}>
+                              {o.live ? "LIVE" : "DRAFT"}
+                            </span>
+                            <span style={{ color: B.c.faint, fontSize: 10 }}>{open ? "\u25BE" : "\u25B8"}</span>
+                          </button>
+
+                          {open && (
+                            <div className="hq-fade" style={{ padding: "0 11px 11px" }}>
+                              <div className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.4, color: B.c.faint, margin: "8px 0 4px" }}>WHAT THEY GET</div>
+                              <textarea defaultValue={o.blurb}
+                                onBlur={(e) => setOne(o.id, { blurb: e.target.value.trim() })}
+                                style={{ ...input, minHeight: 54, fontSize: 12.5, marginBottom: 9 }} />
+
+                              <div className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.4, color: B.c.faint, marginBottom: 4 }}>SQUARE CHECKOUT LINK</div>
+                              <input defaultValue={o.squareUrl || ""} placeholder="https://square.link/u/..."
+                                onBlur={(e) => setOne(o.id, { squareUrl: e.target.value.trim() })}
+                                style={{ ...input, fontSize: 12, marginBottom: 4 }} />
+                              <p className="hq-mono" style={{ fontSize: 6, letterSpacing: 0.8, color: B.c.faint, margin: "0 0 10px", lineHeight: 1.8 }}>
+                                MAKE THE ITEM IN SQUARE, COPY ITS CHECKOUT LINK, PASTE IT HERE
+                              </p>
+
+                              <div style={{ display: "flex", gap: 7, alignItems: "center", marginBottom: 9 }}>
+                                <span className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.2, color: B.c.faint }}>EXPIRES AFTER</span>
+                                <input type="number" min="0" defaultValue={o.expiresDays || 0}
+                                  onBlur={(e) => setOne(o.id, { expiresDays: Math.max(0, Number(e.target.value) || 0) })}
+                                  style={{ ...input, width: 70, fontSize: 12, padding: "7px 9px" }} />
+                                <span className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.2, color: B.c.faint }}>
+                                  DAYS &middot; 0 = NEVER
+                                </span>
+                              </div>
+
+                              <button onClick={() => {
+                                  if (!o.live && !ready) { toast("Add its Square link first", "bad"); return; }
+                                  setOne(o.id, { live: !o.live });
+                                  toast(o.live ? `${o.name} hidden from clients` : `${o.name} is live`);
+                                }}
+                                className="hq-mono hq-press"
+                                style={{ width: "100%", padding: "11px 0", borderRadius: 7, cursor: "pointer", border: "none",
+                                  background: o.live ? "transparent" : (ready ? B.c.metal : "#DCD5CA"),
+                                  color: o.live ? B.c.faint : B.c.deep,
+                                  boxShadow: o.live ? `inset 0 0 0 1px ${B.c.line}` : "none",
+                                  fontSize: 9, letterSpacing: 1.6, fontWeight: 700 }}>
+                                {o.live ? "TAKE IT OFF THE PORTAL" : ready ? "\u2713 LIVE \u2014 SHOW IN CLIENT PORTAL" : "NEEDS A SQUARE LINK"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+
+              {(!offers || !offers.length) && (
+                <button onClick={async () => { await saveOffers(DEFAULT_OFFERS); toast("All 14 offers added as drafts"); }}
+                  className="hq-mono hq-press"
+                  style={{ width: "100%", padding: "12px 0", borderRadius: 7, border: "none", cursor: "pointer",
+                    background: B.c.metal, color: B.c.deep, fontSize: 9.5, letterSpacing: 2, fontWeight: 700 }}>
+                  SET UP MY OFFERS
+                </button>
+              )}
+            </>
+          );
+        })()}
+      </div>
       </>)}
 
       {pane === "content" && (<>
@@ -4401,10 +4550,25 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
             </button>
           ))}
         </div>
-        <button onClick={addAlert} disabled={!alertForm.text.trim()}
-          style={{ width: "100%", padding: 13, borderRadius: 4, border: "none", background: alertForm.text.trim() ? B.c.accent : "#CBC2B4", color: "#fff", fontWeight: 500, fontSize: 12, letterSpacing: 2, textTransform: "uppercase" }}>
-          Post to clients
-        </button>
+        <div style={{ display: "flex", gap: 7 }}>
+          <button onClick={() => addAlert(false)} disabled={!alertForm.text.trim()}
+            style={{ flex: 1, padding: 13, borderRadius: 5, border: "none", cursor: "pointer",
+              background: alertForm.text.trim() ? B.c.accent : "#CBC2B4", color: "#fff",
+              fontWeight: 500, fontSize: 10.5, letterSpacing: 1.5, textTransform: "uppercase" }}>
+            Post it
+          </button>
+          <button onClick={() => addAlert(true)} disabled={!alertForm.text.trim()}
+            style={{ flex: 1, padding: 13, borderRadius: 5, cursor: "pointer",
+              border: `1px solid ${alertForm.text.trim() ? B.c.accent : B.c.line}`, background: "transparent",
+              color: alertForm.text.trim() ? B.c.accent : B.c.faint,
+              fontWeight: 500, fontSize: 10.5, letterSpacing: 1.5, textTransform: "uppercase" }}>
+            Post &amp; notify
+          </button>
+        </div>
+        <p className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.1, color: B.c.faint, textAlign: "center", marginTop: 8, lineHeight: 1.9 }}>
+          POST IT &rarr; A BANNER ON THEIR HOME PAGE<br />
+          POST &amp; NOTIFY &rarr; ALSO BUZZES THE PHONES OF ANYONE WHO TURNED NOTIFICATIONS ON
+        </p>
         {alerts.map((a) => (
           <div key={a.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 2px 8px", borderBottom: `1px solid ${B.c.line}` }}>
             <span className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.5, color: B.c.accent, paddingTop: 3, whiteSpace: "nowrap" }}>{a.target}{a.expires ? <span style={{ color: B.c.faint }}><br />→{a.expires.slice(5)}</span> : null}</span>
@@ -4608,130 +4772,6 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
             border: `1px solid ${B.c.accent}`, color: B.c.accent, fontSize: 9.5, letterSpacing: 2, fontWeight: 700 }}>
           OPEN SQUARE CALENDAR
         </a>
-      </div>
-
-      {/* Bundles & memberships */}
-      <SettingHead B={B} note="Every offer starts as a draft. Tick Live only when its Square link works — that is what clients pay through.">Bundles &amp; Memberships</SettingHead>
-      <div style={{ ...panelStyle(B) }}>
-        {(() => {
-          const list = (offers && offers.length ? offers : DEFAULT_OFFERS);
-          const liveCount = list.filter((o) => o.live).length;
-          const groups = [
-            ["first", "First-time offers"],
-            ["bundle", "Prepaid bundles"],
-            ["membership", "Membership"],
-          ];
-          const setOne = async (id, patch) => {
-            const next = list.map((o) => (o.id === id ? { ...o, ...patch } : o));
-            await saveOffers(next);
-          };
-
-          return (
-            <>
-              <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 12px", lineHeight: 1.6 }}>
-                {liveCount === 0
-                  ? "Nothing is showing to clients yet. Paste a Square checkout link on an offer, then tick Live."
-                  : `${liveCount} of ${list.length} showing in the client portal.`}
-              </p>
-
-              {groups.map(([type, label]) => {
-                const mine = list.filter((o) => o.type === type);
-                if (!mine.length) return null;
-                return (
-                  <div key={type} style={{ marginBottom: 14 }}>
-                    <div className="hq-mono" style={{ fontSize: 7, letterSpacing: 2, color: B.c.accent, fontWeight: 700, marginBottom: 7 }}>
-                      {label.toUpperCase()}
-                    </div>
-
-                    {mine.map((o) => {
-                      const open = offerOpen === o.id;
-                      const ready = !!String(o.squareUrl || "").trim();
-                      return (
-                        <div key={o.id} style={{ border: `1px solid ${o.live ? B.c.accent : B.c.line}`, borderRadius: 9, marginBottom: 7, overflow: "hidden" }}>
-                          <button onClick={() => setOfferOpen(open ? "" : o.id)}
-                            style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "10px 11px",
-                              background: o.live ? B.c.soft : "transparent", border: "none", cursor: "pointer", textAlign: "left" }}>
-                            <span style={{ flex: 1, minWidth: 0 }}>
-                              <span style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: B.c.ink, lineHeight: 1.25 }}>
-                                {o.name}
-                                {o.service !== "mixed" && (
-                                  <span style={{ fontWeight: 300, opacity: 0.7 }}> &middot; {serviceName(o.service)}</span>
-                                )}
-                              </span>
-                              <span className="hq-mono" style={{ display: "block", fontSize: 7.5, letterSpacing: 0.8, color: B.c.faint, marginTop: 3 }}>
-                                {offerMoney(o.price)}
-                                {o.type === "membership" ? " / MONTH" : ""}
-                                {o.saves > 0 ? ` \u00b7 SAVES ${offerMoney(o.saves)} (${o.discount}%)` : ""}
-                              </span>
-                            </span>
-                            <span className="hq-mono" style={{ flexShrink: 0, fontSize: 6.5, letterSpacing: 1, fontWeight: 700, borderRadius: 999,
-                              padding: "3px 8px",
-                              background: o.live ? B.c.accent : "transparent",
-                              color: o.live ? "#FFFFFF" : B.c.faint,
-                              border: o.live ? "none" : `1px solid ${B.c.line}` }}>
-                              {o.live ? "LIVE" : "DRAFT"}
-                            </span>
-                            <span style={{ color: B.c.faint, fontSize: 10 }}>{open ? "\u25BE" : "\u25B8"}</span>
-                          </button>
-
-                          {open && (
-                            <div className="hq-fade" style={{ padding: "0 11px 11px" }}>
-                              <div className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.4, color: B.c.faint, margin: "8px 0 4px" }}>WHAT THEY GET</div>
-                              <textarea defaultValue={o.blurb}
-                                onBlur={(e) => setOne(o.id, { blurb: e.target.value.trim() })}
-                                style={{ ...input, minHeight: 54, fontSize: 12.5, marginBottom: 9 }} />
-
-                              <div className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.4, color: B.c.faint, marginBottom: 4 }}>SQUARE CHECKOUT LINK</div>
-                              <input defaultValue={o.squareUrl || ""} placeholder="https://square.link/u/..."
-                                onBlur={(e) => setOne(o.id, { squareUrl: e.target.value.trim() })}
-                                style={{ ...input, fontSize: 12, marginBottom: 4 }} />
-                              <p className="hq-mono" style={{ fontSize: 6, letterSpacing: 0.8, color: B.c.faint, margin: "0 0 10px", lineHeight: 1.8 }}>
-                                MAKE THE ITEM IN SQUARE, COPY ITS CHECKOUT LINK, PASTE IT HERE
-                              </p>
-
-                              <div style={{ display: "flex", gap: 7, alignItems: "center", marginBottom: 9 }}>
-                                <span className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.2, color: B.c.faint }}>EXPIRES AFTER</span>
-                                <input type="number" min="0" defaultValue={o.expiresDays || 0}
-                                  onBlur={(e) => setOne(o.id, { expiresDays: Math.max(0, Number(e.target.value) || 0) })}
-                                  style={{ ...input, width: 70, fontSize: 12, padding: "7px 9px" }} />
-                                <span className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.2, color: B.c.faint }}>
-                                  DAYS &middot; 0 = NEVER
-                                </span>
-                              </div>
-
-                              <button onClick={() => {
-                                  if (!o.live && !ready) { toast("Add its Square link first", "bad"); return; }
-                                  setOne(o.id, { live: !o.live });
-                                  toast(o.live ? `${o.name} hidden from clients` : `${o.name} is live`);
-                                }}
-                                className="hq-mono hq-press"
-                                style={{ width: "100%", padding: "11px 0", borderRadius: 7, cursor: "pointer", border: "none",
-                                  background: o.live ? "transparent" : (ready ? B.c.metal : "#DCD5CA"),
-                                  color: o.live ? B.c.faint : B.c.deep,
-                                  boxShadow: o.live ? `inset 0 0 0 1px ${B.c.line}` : "none",
-                                  fontSize: 9, letterSpacing: 1.6, fontWeight: 700 }}>
-                                {o.live ? "TAKE IT OFF THE PORTAL" : ready ? "\u2713 LIVE \u2014 SHOW IN CLIENT PORTAL" : "NEEDS A SQUARE LINK"}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-
-              {(!offers || !offers.length) && (
-                <button onClick={async () => { await saveOffers(DEFAULT_OFFERS); toast("All 14 offers added as drafts"); }}
-                  className="hq-mono hq-press"
-                  style={{ width: "100%", padding: "12px 0", borderRadius: 7, border: "none", cursor: "pointer",
-                    background: B.c.metal, color: B.c.deep, fontSize: 9.5, letterSpacing: 2, fontWeight: 700 }}>
-                  SET UP MY OFFERS
-                </button>
-              )}
-            </>
-          );
-        })()}
       </div>
 
       {/* Her invite wording */}
@@ -6611,7 +6651,7 @@ function PageantsPane({ B, pageants, savePageants }) {
 
   const Card = ({ p, dim }) => (
     <button onClick={() => setOpen(p.id)}
-      style={{ ...card, width: "100%", textAlign: "left", padding: "15px 17px", marginBottom: 12, borderLeft: `2px solid ${dim ? B.c.line : B.c.accent}`, opacity: dim ? 0.65 : 1, cursor: "pointer" }}>
+      style={{ ...card, width: "100%", textAlign: "left", padding: "15px 17px", marginBottom: 12, borderLeft: `2px solid ${dim ? B.c.line : B.c.accent}`, opacity: dim ? 0.65 : 1, cursor: "pointer", color: B.c.ink, textAlign: "left" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
         <div style={{ fontFamily: B.display, fontWeight: 600, fontSize: 18 }}><span style={{ color: B.c.accent }}>♛</span> {p.name}</div>
         {daysOut(p.date) !== null && !dim && (
