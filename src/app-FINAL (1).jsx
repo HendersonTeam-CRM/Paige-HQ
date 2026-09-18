@@ -1145,7 +1145,8 @@ export default function PaigeHQ() {
         {tab === "settings" && mode === "paige" && (
           <SettingsTab B={B} bizCfg={bizCfg} saveBizCfg={saveBizCfg} leads={leads} saveLeads={saveLeads} alerts={alerts} saveAlerts={saveAlerts}
             settings={settings} saveSettings={saveSettings} exportAll={exportAll} importAll={importAll} reviews={reviews} saveReviews={saveReviews}
-            gallery={gallery} saveGallery={saveGallery} clients={clients} saveClients={saveClients} events={events} offers={offers} saveOffers={saveOffers} requests={requests} pageants={pageants} savePageants={savePageants} />
+            gallery={gallery} saveGallery={saveGallery} clients={clients} saveClients={saveClients} events={events} offers={offers} saveOffers={saveOffers}
+            index={index} income={income} mileage={mileage} setTab={setTab} setVaultView={setVaultView} requests={requests} pageants={pageants} savePageants={savePageants} />
         )}
         {tab === "home" && (brandKey === "hub"
           ? <HubHome onGo={(k) => { switchBrand(k); setTab("home"); }} mkqLive={mkqLive} mkqDate={mkqSource?.date} daysToMkq={daysToMkq}
@@ -1161,7 +1162,7 @@ export default function PaigeHQ() {
               : <StudioTab B={B} services={bizCfg?.[brandKey]?.services} hours={bizCfg?.[brandKey]?.hours} reviews={reviews} saveReviews={saveReviews} gallery={gallery} pageants={pageants} settings={settings} googleUrl={settings[brandKey === "vg" ? "googleVG" : "googlePP"] || settings.googleUrl || ""} key={brandKey + "h"} />)}
         {tab === "calendar" && <CalendarTab B={B} events={events} saveEvents={saveEvents} pageants={pageants} savePageants={savePageants} clients={clients} directing={directing} saveDirecting={saveDirecting} busyBlocks={busyBlocks} initialView={calView} key={brandKey + calView} />}
         {tab === "clients" && <ClientsTab B={B} clients={clients} saveClients={saveClients} openPortal={setPortalId} clearSamples={clearSamples} hasSamples={hasSamples} settings={settings} />}
-        {tab === "vault" && <VaultTab B={B} index={index} saveIndex={saveIndex} income={income} saveIncome={saveIncome} mileage={mileage} saveMileage={saveMileage} settings={settings} saveSettings={saveSettings} directing={directing} pageants={pageants} clients={clients} estate={estate} initialView={vaultView} key={brandKey + "v" + vaultView} />}
+        {tab === "vault" && <VaultTab B={B} index={index} saveIndex={saveIndex} income={income} saveIncome={saveIncome} mileage={mileage} saveMileage={saveMileage} settings={settings} saveSettings={saveSettings} directing={directing} pageants={pageants} clients={clients} estate={estate} initialView={vaultView} setTab={setTab} key={brandKey + "v" + vaultView} />}
       </main>
       </div>
 
@@ -1169,15 +1170,15 @@ export default function PaigeHQ() {
       <nav className="hq-nav" style={{ background: B.c.card, borderTop: `2px solid ${B.c.deep}`, "--nav-accent": B.c.deep }}>
         <div className="hq-nav-inner">
           {[["today", "Today", "clock"], ["calendar", "Calendar", "calendar"], ["clients", "Clients", "user"],
-            ["vault", "Vault", "check"], ["settings", "Settings", "sparkle"]].map(([key, label, icon]) => {
+            ["settings", "Settings", "sparkle"]].map(([key, label, icon]) => {
             const on = tab === key;
             return (
               <button key={key} onClick={() => setTab(key)}
-                style={{ flex: 1, padding: "10px 0 calc(9px + env(safe-area-inset-bottom, 0px))", minHeight: 58,
+                style={{ flex: 1, padding: "11px 0 calc(10px + env(safe-area-inset-bottom, 0px))", minHeight: 60,
                   display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
                   background: on ? B.c.deep : "none", border: "none", cursor: "pointer",
                   color: on ? B.c.gold : B.c.faint }}>
-                <Icon name={icon} size={19} stroke={on ? 2 : 1.6} />
+                <Icon name={icon} size={20} stroke={on ? 2 : 1.6} />
                 <span style={{ fontSize: 9.5, letterSpacing: 0.3, fontWeight: on ? 700 : 500 }}>{label}</span>
               </button>
             );
@@ -3086,6 +3087,7 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
   const [addOpen, setAddOpen] = useState(false);
   const [logging, setLogging] = useState(null);
   const [logNote, setLogNote] = useState("");
+  const [laterOpen, setLaterOpen] = useState(() => { try { return localStorage.getItem("hq-later-shut") !== "1"; } catch { return true; } });
   const [timeline, setTimeline] = useState(() => { try { return localStorage.getItem("hq-timeline") !== "0"; } catch { return true; } });
   const camRef = useRef(null);
   const [todoOpen, setTodoOpen] = useState(() => { try { return localStorage.getItem("hq-todo-shut") !== "1"; } catch { return true; } });
@@ -3461,8 +3463,8 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
             const len = e2.mins || minsFromName(e2.title) || e2.durMin || 0;
             const notes = c
               ? (e2.type === "tan"
-                  ? [c.shade, c.skinNotes].filter(Boolean).join(" \u00b7 ")
-                  : [c.division, c.goals].filter(Boolean).join(" \u00b7 "))
+                  ? [c.shade, c.skinNotes].filter(Boolean).join(" · ")
+                  : [c.division, c.goals].filter(Boolean).join(" · "))
               : "";
 
             return (
@@ -3637,6 +3639,27 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
         </div>
       )}
 
+      {/* the quieter half — she checks these now and then, not between clients */}
+      {(() => {
+        const nudges =
+          (requests || []).filter((r) => r.kind === "waitlist").length +
+          (clients || []).filter((c) => c.bigDate && c.bigDate >= today).length;
+        return (
+          <div style={{ marginBottom: 12 }}>
+            <button onClick={() => { const v = !laterOpen; setLaterOpen(v); try { localStorage.setItem("hq-later-shut", v ? "0" : "1"); } catch {} }}
+              className="hq-press"
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 13px", borderRadius: 9,
+                border: `1px solid ${B.c.line}`, background: B.c.card, cursor: "pointer", textAlign: "left" }}>
+              <span style={{ fontFamily: B.display, fontSize: 13.5, fontWeight: 600, color: B.c.ink }}>Later &amp; this week</span>
+              {nudges > 0 && (
+                <span className="hq-mono" style={{ fontSize: 7, letterSpacing: 1, fontWeight: 700, borderRadius: 999,
+                  padding: "2px 7px", background: B.c.accent, color: "#FFFFFF" }}>{nudges}</span>
+              )}
+              <span style={{ flex: 1 }} />
+              <span style={{ color: B.c.faint, fontSize: 10 }}>{laterOpen ? "\u25BE" : "\u25B8"}</span>
+            </button>
+
+            {laterOpen && <div className="hq-fade" style={{ marginTop: 10 }}>
       {/* what is quietly piling up */}
       {(() => {
         const noAmount = index.filter((r) => !r.sample && !(r.amount > 0)).length;
@@ -3832,6 +3855,11 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
           </div>
         </div>
       )}
+
+            </div>}
+          </div>
+        );
+      })()}
 
       {/* Monthly pulse */}
       {(pulseGlows > 0 || pulseLessons > 0) && (
@@ -4217,7 +4245,7 @@ async function shareCard(opts) {
 }
 
 /* ================= SETTINGS (Paige only) ================= */
-function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAlerts, settings = {}, saveSettings, exportAll, importAll, reviews = [], saveReviews, gallery = [], saveGallery, clients = [], saveClients, events = [], offers = [], saveOffers, requests = [], pageants = [], savePageants }) {
+function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAlerts, settings = {}, saveSettings, exportAll, importAll, reviews = [], saveReviews, gallery = [], saveGallery, clients = [], saveClients, events = [], offers = [], saveOffers, index = [], income = [], mileage = [], setTab, setVaultView, requests = [], pageants = [], savePageants }) {
   const { Field, input, Primary, Ghost, chip, card, H } = useBrandBits(B);
   const defFor = (k) => ({ services: BRANDS[k].services.map((s) => ({ ...s })), hours: BRANDS[k].hours.map((h) => [...h]) });
   const [bk, setBk] = useState("pp");
@@ -4283,11 +4311,11 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
 
       {/* which drawer */}
       <div style={{ display: "flex", gap: 5, marginBottom: 16, overflowX: "auto", paddingBottom: 2 }}>
-        {[["money", "PRICES"], ["clients", "CLIENTS"], ["content", "CONTENT"], ["connect", "CONNECT"], ["data", "DATA"]].map(([v, lab]) => {
+        {[["money", "PRICES"], ["clients", "CLIENTS"], ["content", "CONTENT"], ["connect", "CONNECT"], ["vault", "RECEIPTS"], ["data", "DATA"]].map(([v, lab]) => {
           const on = pane === v;
           return (
             <button key={v} onClick={() => setPane(v)} className="hq-mono hq-press"
-              style={{ flex: "1 0 auto", padding: "10px 12px", borderRadius: 6, fontSize: 8, letterSpacing: 1.4, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap",
+              style={{ flex: "0 0 auto", padding: "10px 13px", borderRadius: 6, fontSize: 8, letterSpacing: 1.4, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap",
                 border: `1px solid ${on ? B.c.deep : B.c.line}`, background: on ? B.c.deep : "#FFFFFF", color: on ? B.c.gold : B.c.ink }}>
               {lab}
             </button>
@@ -4296,7 +4324,8 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       </div>
 
       <p style={{ fontSize: 12, fontWeight: 300, color: B.c.faint, margin: "-6px 0 14px", lineHeight: 1.6 }}>
-        {pane === "money" ? "What you charge and when you're open — clients see these the moment you save."
+        {pane === "vault" ? "Receipts, income and mileage \u2014 everything your accountant needs."
+          : pane === "money" ? "What you charge and when you're open — clients see these the moment you save."
           : pane === "clients" ? "Their portal links, pageant registration, and anything they've sent you."
           : pane === "content" ? "What shows on your site — notices, photos and reviews."
           : pane === "connect" ? "Notifications, your calendar, and Google."
@@ -4539,7 +4568,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
 
         <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 2, color: B.c.accent, fontWeight: 700, margin: "16px 0 6px" }}>3 · BRING IN EVERYTHING ALREADY BOOKED</div>
         <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 10px", lineHeight: 1.6 }}>
-          The square icon on Today keeps you current. This one is for the first time \u2014 it walks a year either side and
+          The square icon on Today keeps you current. This one is for the first time — it walks a year either side and
           brings over every lesson and tan already on your Square calendar, plus a year of payments.
         </p>
         {sqAllMsg && (
@@ -4569,7 +4598,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
           {sqAllBusy ? "WORKING\u2026" : "IMPORT EVERY SQUARE APPOINTMENT"}
         </button>
 
-        <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 2, color: B.c.accent, fontWeight: 700, margin: "16px 0 6px" }}>4 \u00b7 STOP CLIENTS BOOKING OVER IT</div>
+        <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 2, color: B.c.accent, fontWeight: 700, margin: "16px 0 6px" }}>4 · STOP CLIENTS BOOKING OVER IT</div>
         <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 10px", lineHeight: 1.6 }}>
           Square decides when you're bookable, so block those same hours there and clients simply won't see them offered.
         </p>
@@ -5186,6 +5215,49 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       ))}
       </>)}
 
+      {pane === "vault" && (<>
+        <SettingHead B={B} note="Snap a receipt from Today and it lands here, read and filed.">Receipts &amp; Income</SettingHead>
+        <div style={{ ...panelStyle(B) }}>
+          {(() => {
+            const year = String(new Date().getFullYear());
+            const spent = (index || []).filter((r) => String(r.date || "").startsWith(year))
+              .reduce((s, r) => s + (Number(r.amount) || 0), 0);
+            const earned = (income || []).filter((r) => String(r.date || "").startsWith(year))
+              .reduce((s, r) => s + (Number(r.amount) || 0), 0);
+            const miles = (mileage || []).filter((r) => String(r.date || "").startsWith(year))
+              .reduce((s, r) => s + (Number(r.miles) || 0), 0);
+
+            return (
+              <>
+                <div style={{ display: "flex", gap: 7, marginBottom: 12 }}>
+                  {[["In", earned], ["Out", spent], ["Miles", miles]].map(([lab, n], i) => (
+                    <div key={lab} style={{ flex: 1, textAlign: "center", padding: "10px 4px", borderRadius: 8, background: B.c.soft }}>
+                      <div style={{ fontFamily: B.display, fontSize: 17, fontWeight: 600, color: B.c.ink, lineHeight: 1 }}>
+                        {i === 2 ? Math.round(n).toLocaleString() : money(n)}
+                      </div>
+                      <div className="hq-mono" style={{ fontSize: 6, letterSpacing: 1.2, color: B.c.faint, marginTop: 4 }}>{lab.toUpperCase()} &middot; {year}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 11px", lineHeight: 1.6 }}>
+                  {(index || []).length
+                    ? `${(index || []).length} receipt${(index || []).length === 1 ? "" : "s"} filed. Open the full vault to sort them, add income or export for your accountant.`
+                    : "No receipts yet. Tap the camera on Today, photograph one, and it gets read and filed on its own."}
+                </p>
+
+                <button onClick={() => { setVaultView("expenses"); setTab("vault"); }}
+                  className="hq-mono hq-press"
+                  style={{ width: "100%", padding: "13px 0", borderRadius: 7, border: "none", cursor: "pointer",
+                    background: B.c.metal, color: B.c.deep, fontSize: 9.5, letterSpacing: 2, fontWeight: 700 }}>
+                  OPEN THE FULL VAULT
+                </button>
+              </>
+            );
+          })()}
+        </div>
+      </>)}
+
       {pane === "data" && (<>
       {/* Backup */}
       <SettingHead B={B} note="Everything, saved to this phone. Worth doing weekly.">Backup</SettingHead>
@@ -5616,6 +5688,27 @@ function GalleryPage({ B, lock }) {
     </div>
   );
 }
+
+/* Tiers earned from real visits — the Square history import filled these in,
+   so nobody starts at zero. The tenth visit is on the house; the counter
+   resets after it is used so it comes round again. */
+const TIERS = [
+  { at: 20, name: "Devoted",  mark: "\u265B", ink: "#8A6A2F", bg: "#F7EFDC" },
+  { at: 10, name: "Regular",  mark: "\u2726", ink: "#5B4A8A", bg: "#EFECF8" },
+  { at: 5,  name: "Familiar", mark: "\u2726", ink: "#4E6B4E", bg: "#EBF3EC" },
+  { at: 1,  name: "New",      mark: "\u00b7", ink: "#8A8A92", bg: "#F1F1F3" },
+];
+const tierFor = (visits) => TIERS.find((t) => visits >= t.at) || null;
+
+/* Where they are on the way to a free one */
+const loyalty = (client) => {
+  const visits = (client.history || []).length;
+  const used = Number(client.freebiesUsed || 0);
+  const earned = Math.floor(visits / 10);
+  const owed = Math.max(0, earned - used);
+  const toGo = owed > 0 ? 0 : 10 - (visits % 10);
+  return { visits, owed, toGo, tier: tierFor(visits) };
+};
 
 /* ================= OFFERS, BUNDLES & MEMBERSHIPS =================
    Every offer starts as a draft. Nothing reaches a client until Paige
@@ -6331,17 +6424,18 @@ function CalendarTab({ B, events, saveEvents, pageants, savePageants, clients, d
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
         <div style={{ fontWeight: 500, fontSize: 14.5 }}>
           <span style={{ color: B.c.accent, marginRight: 6 }}>{EVENT_TYPES[e.type]?.mark}</span>
-          {e.title}{e.clientName ? <span style={{ fontWeight: 300, color: B.c.faint }}> · {e.clientName}</span> : null}
+          {serviceLabel(e.title, e.type)}
+          {(e.mins || minsFromName(e.title)) ? <span style={{ fontSize: 10, fontStyle: "italic", fontWeight: 300, color: B.c.faint, marginLeft: 5 }}>{lenLabel(e.mins || minsFromName(e.title))}</span> : null}
+          {e.clientName ? <span style={{ fontWeight: 300, color: B.c.faint }}> · {e.clientName}</span> : null}
         </div>
         <div className="hq-mono" style={{ fontSize: 10, letterSpacing: 1, color: B.c.faint, whiteSpace: "nowrap" }}>{prettyTime(e.time)}</div>
       </div>
       {e.notes && <div style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, marginTop: 3 }}>{e.notes}</div>}
-      <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
-        <button onClick={() => toIphone(e)} className="hq-mono" style={{ border: "none", background: "none", color: B.c.accent, fontSize: 9.5, letterSpacing: 2, padding: 0, fontWeight: 500 }}>ADD TO IPHONE</button>
-        {e.kind === "event" && (
+      {e.kind === "event" && (
+        <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
           <button onClick={() => saveEvents(events.filter((x) => x.id !== e.id))} className="hq-mono" style={{ border: "none", background: "none", color: B.c.faint, fontSize: 9.5, letterSpacing: 2, padding: 0 }}>REMOVE</button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 
@@ -6380,7 +6474,7 @@ function CalendarTab({ B, events, saveEvents, pageants, savePageants, clients, d
   return (
     <div className="hq-fade">
       <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-        {[["month", "MONTH"], ["lesson", "LESSONS"], ["tan", "TANNING"], ["dance", "DANCE"], ["pageants", "PAGEANTS"]].map(([v, lab]) => (
+        {[["month", "MONTH"], ["lesson", "LESSONS"], ["tan", "TANNING"], ["pageants", "PAGEANTS"]].map(([v, lab]) => (
           <button key={v} className="hq-mono" style={{ ...chip(view === v), flex: 1, textAlign: "center", padding: "7px 4px", fontSize: 8.5 }} onClick={() => setView(v)}>{lab}</button>
         ))}
       </div>
@@ -6392,8 +6486,14 @@ function CalendarTab({ B, events, saveEvents, pageants, savePageants, clients, d
       )}
 
       {view !== "pageants" && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <Primary onClick={() => { setAdding(!adding); if (!adding && view === "month") setForm({ ...form, date: selDay }); }} style={{ flex: 1, padding: "13px 10px", fontSize: 11 }}>{adding ? "Cancel" : "Add to schedule"}</Primary>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <button onClick={() => { setAdding(!adding); if (!adding && view === "month") setForm({ ...form, date: selDay }); }}
+            className="hq-mono hq-press"
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 13px", borderRadius: 999, cursor: "pointer",
+              border: `1px solid ${adding ? B.c.faint : B.c.accent}`, background: "transparent",
+              color: adding ? B.c.faint : B.c.accent, fontSize: 8, letterSpacing: 1.5, fontWeight: 700 }}>
+            {adding ? "CANCEL" : "+  ADD TO SCHEDULE"}
+          </button>
         </div>
       )}
       {adding && view !== "pageants" && <AddForm />}
@@ -6424,15 +6524,20 @@ function CalendarTab({ B, events, saveEvents, pageants, savePageants, clients, d
               return (
                 <button key={d} onClick={() => setSelDay(d)}
                   style={{
-                    aspectRatio: "1 / 1.05", border: `1px solid ${isSel ? B.c.accent : B.c.line}`, borderRadius: 6,
-                    background: isSel ? B.c.deep : B.c.card, color: isSel ? B.c.gold : isToday ? B.c.accent : B.c.ink,
+                    aspectRatio: "1 / 1.05", borderRadius: 6, cursor: "pointer",
+                    border: `1px solid ${isSel ? B.c.accent : isToday ? B.c.accent : B.c.line}`,
+                    background: isSel ? B.c.deep : items.length >= 4 ? B.c.soft : B.c.card,
+                    color: isSel ? B.c.gold : isToday ? B.c.accent : B.c.ink,
                     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: 2,
                   }}>
                   <span className="hq-mono" style={{ fontSize: 12, fontWeight: isToday || isSel ? 600 : 400 }}>{Number(d.slice(-2))}</span>
-                  <span style={{ display: "flex", gap: 2, height: 5 }}>
-                    {items.slice(0, 3).map((it, j) => (
+                  <span style={{ display: "flex", gap: 2, height: 5, alignItems: "center" }}>
+                    {items.slice(0, 4).map((it, j) => (
                       <span key={j} style={{ width: 4, height: 4, borderRadius: "50%", background: isSel ? B.c.gold : dotColor(it.type) }} />
                     ))}
+                    {items.length > 4 && (
+                      <span className="hq-mono" style={{ fontSize: 5.5, color: isSel ? B.c.gold : B.c.faint, marginLeft: 1 }}>+{items.length - 4}</span>
+                    )}
                   </span>
                 </button>
               );
@@ -6440,10 +6545,17 @@ function CalendarTab({ B, events, saveEvents, pageants, savePageants, clients, d
           </div>
 
           {/* selected day */}
-          <div style={{ fontFamily: B.display, fontSize: 16, fontWeight: 600, color: selDay === today ? B.c.accent : B.c.ink, marginBottom: 2 }}>{prettyDay(selDay)}</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 2 }}>
+            <span style={{ fontFamily: B.display, fontSize: 16, fontWeight: 600, color: selDay === today ? B.c.accent : B.c.ink }}>{prettyDay(selDay)}</span>
+            {(byDate[selDay] || []).length > 0 && (
+              <span className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.4, color: B.c.faint }}>
+                {(byDate[selDay] || []).length} BOOKED
+              </span>
+            )}
+          </div>
           <hr className="lux-rule" style={{ margin: "0 0 10px" }} />
           {(byDate[selDay] || []).length === 0 && (
-            <p style={{ fontSize: 13.5, fontWeight: 300, color: B.c.faint }}>Nothing scheduled this day — tap "Add to schedule" to book it.</p>
+            <p style={{ fontSize: 13.5, fontWeight: 300, color: B.c.faint }}>Nothing booked this day.</p>
           )}
           {(byDate[selDay] || []).map(ItemCard)}
         </>
@@ -6811,7 +6923,9 @@ function ClientsTab({ B, clients, saveClients, openPortal, clearSamples, hasSamp
   const [form, setForm] = useState(blank);
   const [open, setOpen] = useState(null);
 
-  const shown = clients.filter((c) => filter === "all" || c.biz?.[filter]).sort((a, b) => a.name.localeCompare(b.name));
+  const shown = clients
+    .filter((c) => filter === "all" ? true : filter === "owed" ? loyalty(c).owed > 0 : c.biz?.[filter])
+    .sort((a, b) => String(a.name || "").trim().localeCompare(String(b.name || "").trim(), "en", { sensitivity: "base" }));
   const addClient = async () => {
     if (!form.name.trim()) return;
     await saveClients([...clients, { ...form, id: "c" + Date.now(), history: [] }]);
@@ -6821,7 +6935,13 @@ function ClientsTab({ B, clients, saveClients, openPortal, clearSamples, hasSamp
   return (
     <div className="hq-fade">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <H>Clientele</H>
+        <div>
+          <H>Clientele</H>
+          <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.6, color: B.c.faint, marginTop: 3 }}>
+            {clients.length} ON THE BOOKS
+            {(() => { const n = clients.filter((c) => loyalty(c).owed > 0).length; return n ? ` \u00b7 ${n} OWED A FREE ONE` : ""; })()}
+          </div>
+        </div>
         <button onClick={() => setAdding(!adding)} className="hq-mono"
           style={{ padding: "8px 16px", borderRadius: 3, border: "none", background: B.c.deep, color: B.c.gold, fontSize: 10, letterSpacing: 2 }}>
           {adding ? "CANCEL" : "+ ADD"}
@@ -6836,7 +6956,7 @@ function ClientsTab({ B, clients, saveClients, openPortal, clearSamples, hasSamp
       )}
 
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-        {[["all", "ALL"], ["PP", "♛ PAGEANT"], ["VG", "✦ GLOW"], ["MKQ", "♛ MKQ"], ["DANCE", "♬ DANCE"]].map(([v, lab]) => (
+        {[["all", "EVERYONE"], ["PP", "♛ PAGEANT"], ["VG", "✦ GLOW"], ["owed", "✦ FREE ONE OWED"]].map(([v, lab]) => (
           <button key={v} className="hq-mono" style={chip(filter === v)} onClick={() => setFilter(v)}>{lab}</button>
         ))}
       </div>
@@ -6846,7 +6966,7 @@ function ClientsTab({ B, clients, saveClients, openPortal, clearSamples, hasSamp
           <Field label="Name"><input style={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
           <Field label="Client of">
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {[["PP", "♛ Pageant Perfect"], ["VG", "✦ Velvet Glow"], ["MKQ", "♛ Miss Kentucky's Queen"], ["DANCE", "♬ Dance"]].map(([k, lab]) => (
+              {[["PP", "♛ Pageant Perfect"], ["VG", "✦ Velvet Glow"]].map(([k, lab]) => (
                 <button key={k} onClick={() => setForm({ ...form, biz: { ...form.biz, [k]: !form.biz[k] } })}
                   style={{ flex: 1, minWidth: 90, padding: "11px 8px", borderRadius: 4, fontSize: 12.5, fontWeight: 500, letterSpacing: 0.5, border: `1px solid ${form.biz[k] ? B.c.deep : B.c.line}`, background: form.biz[k] ? B.c.deep : "transparent", color: form.biz[k] ? B.c.gold : B.c.ink }}>
                   {lab}
@@ -6902,9 +7022,32 @@ function ClientsTab({ B, clients, saveClients, openPortal, clearSamples, hasSamp
                 {c.name}
                 {c.sample && <span className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.5, color: B.c.faint, marginLeft: 8, verticalAlign: "middle" }}>SAMPLE</span>}
               </div>
-              <div className="hq-mono" style={{ fontSize: 9, color: B.c.faint, letterSpacing: 1.5, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {(c.history || []).length} VISIT{(c.history || []).length === 1 ? "" : "S"}{c.shade ? ` · ${c.shade.toUpperCase()}` : ""}{c.division ? ` · ${c.division.toUpperCase()}` : ""}
-                <span style={{ color: B.c.accent, letterSpacing: 2 }}>  {c.biz?.RE && "◈"}{c.biz?.PP && "♛"}{c.biz?.VG && "✦"}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
+                {(() => {
+                  const L = loyalty(c);
+                  return (
+                    <>
+                      {L.tier && L.visits > 0 && (
+                        <span className="hq-mono" style={{ flexShrink: 0, fontSize: 6.5, letterSpacing: 1, fontWeight: 700,
+                          borderRadius: 999, padding: "2px 7px", background: L.tier.bg, color: L.tier.ink }}>
+                          {L.tier.mark} {L.tier.name.toUpperCase()}
+                        </span>
+                      )}
+                      {L.owed > 0 && (
+                        <span className="hq-mono" style={{ flexShrink: 0, fontSize: 6.5, letterSpacing: 1, fontWeight: 700,
+                          borderRadius: 999, padding: "2px 7px", background: "#34C759", color: "#FFFFFF" }}>
+                          FREE ONE OWED
+                        </span>
+                      )}
+                      <span className="hq-mono" style={{ fontSize: 8.5, color: B.c.faint, letterSpacing: 1.2 }}>
+                        {L.visits} VISIT{L.visits === 1 ? "" : "S"}
+                        {L.visits > 0 && L.owed === 0 ? ` · ${L.toGo} TO A FREE ONE` : ""}
+                        {c.shade ? ` · ${c.shade.toUpperCase()}` : ""}
+                      </span>
+                      <span style={{ color: B.c.accent, letterSpacing: 2, fontSize: 9 }}>{c.biz?.PP && "♛"}{c.biz?.VG && "✦"}</span>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </button>
@@ -7287,6 +7430,12 @@ function VaultTab({ B, index, saveIndex, income, saveIncome, mileage, saveMileag
   return (
     <div className="hq-fade">
       <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onFile} style={{ display: "none" }} />
+
+      <button onClick={() => setTab && setTab("settings")} className="hq-mono hq-press"
+        style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 0 10px",
+          border: "none", background: "none", color: B.c.faint, fontSize: 8, letterSpacing: 1.8, cursor: "pointer" }}>
+        &lsaquo; SETTINGS
+      </button>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <H>The Vault</H>
