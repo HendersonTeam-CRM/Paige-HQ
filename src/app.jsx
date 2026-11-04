@@ -1134,7 +1134,7 @@ export default function PaigeHQ() {
               const target = clients.find((c) => (c.name || "").toLowerCase() === (ev.clientName || "").toLowerCase());
               if (target) {
                 await saveClients(clients.map((c) => c.id === target.id
-                  ? { ...c, history: [{ id: "v" + Date.now(), date: ev.date, service: ev.title, style: "", notes: note }, ...(c.history || [])] }
+                  ? { ...c, history: [{ id: "v" + Date.now(), date: ev.date, service: ev.title, type: ev.type || "", style: "", notes: note }, ...(c.history || [])] }
                   : c));
               }
               await saveEvents(events.map((e) => (e.id === ev.id ? { ...e, logged: true } : e)));
@@ -3055,18 +3055,7 @@ function DayTimeline({ B, list, clients = [], upNext, onLog }) {
 }
 
 /* ================= PAIGE'S TODAY (owner dashboard) ================= */
-const HYPE_NAMES = [
-  "Paige", "Paigey", "Paidey", "Miss Paige", "Mrs. Henderson", "Queen", "Bad Bitch",
-  "Good Lookin'", "Gorgeous", "Boss Lady", "Superstar", "Ms. Kentucky", "Champ",
-  "Sunshine", "CEO", "Legend", "Showstopper", "Beautiful", "Crown Holder", "Your Highness",
-  "Boss", "Icon", "Trendsetter", "Powerhouse", "Firecracker", "Hot Stuff", "Knockout",
-  "Stunner", "Glow Queen", "Crown Maker", "Coach", "Director", "Madam President",
-  "Kentucky's Finest", "Bluegrass Beauty", "Trouble", "Ringleader", "Rockstar",
-  "Head Honcho", "Miss Thing", "Doll", "Darlin'", "Sugar", "Wonder Woman",
-  "Machine", "Closer", "Hustler", "Empire Builder", "Big Deal", "Main Event",
-  "Headliner", "Star of the Show", "Force of Nature", "Unstoppable", "Certified Queen",
-  "Royalty", "Her Majesty", "Bombshell", "Radiant One", "Golden Girl", "The Boss",
-];
+const HYPE_NAMES = ["Paige", "Paigey", "Queen", "Beautiful", "Mrs. Paige"];
 const QUOTES = [
   { q: "No one can make you feel inferior without your consent.", by: "Eleanor Roosevelt" },
   { q: "It always seems impossible until it's done.", by: "Nelson Mandela" },
@@ -3092,7 +3081,14 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
   const camRef = useRef(null);
   const [todoOpen, setTodoOpen] = useState(() => { try { return localStorage.getItem("hq-todo-shut") !== "1"; } catch { return true; } });
   const cd = useMkqCountdown();
-    const [nick] = useState(() => HYPE_NAMES[Math.floor(Math.random() * HYPE_NAMES.length)]);
+  const [nick] = useState(() => {
+    let last = "";
+    try { last = localStorage.getItem("hq-last-nick") || ""; } catch {}
+    const pool = HYPE_NAMES.filter((n) => n !== last);
+    const pick = (pool.length ? pool : HYPE_NAMES)[Math.floor(Math.random() * (pool.length || HYPE_NAMES.length))];
+    try { localStorage.setItem("hq-last-nick", pick); } catch {}
+    return pick;
+  });
   const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
   const quote = QUOTES[dayOfYear % QUOTES.length];
   const today = ymd();
@@ -3567,7 +3563,7 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
                   {(e2.mins || minsFromName(e2.title)) ? <span style={{ fontSize: 9, fontStyle: "italic", fontWeight: 300, opacity: 0.55, marginLeft: 4 }}>{lenLabel(e2.mins || minsFromName(e2.title))}</span> : null}
                 </div>
                 <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 1, color: t.ink, opacity: 0.72, marginTop: 3 }}>
-                  {prettyTime(e2.time)}{e2.clientName ? ` · ${e2.clientName.toUpperCase()}` : ""}
+                  {prettyTime(e2.time)}
                 </div>
               </div>
             );
@@ -5740,14 +5736,41 @@ const TIERS = [
 ];
 const tierFor = (visits) => TIERS.find((t) => visits >= t.at) || null;
 
-/* Where they are on the way to a free one */
-const loyalty = (client) => {
-  const visits = (client.history || []).length;
-  const used = Number(client.freebiesUsed || 0);
-  const earned = Math.floor(visits / 10);
+/* ---- PUNCH CARDS ----
+   Two separate cards. Lessons and tans never count toward each other:
+   10 lessons earns a free lesson, 7 tans earns a free tan. Change the
+   `every` numbers here and the whole app follows. */
+const CARDS = {
+  lesson: { every: 10, one: "LESSON", many: "LESSONS", free: "FREE LESSON", mark: "♛" },
+  tan:    { every: 7,  one: "TAN",    many: "TANS",    free: "FREE TAN",    mark: "✦" },
+};
+
+/* Which card a visit punches. Reuses serviceLabel, so the punch card can
+   never disagree with the label she sees on the row. A visit that is
+   neither (a consult, a dance class) punches nothing. */
+const cardFor = (v = {}) => {
+  const n = serviceLabel(v.service || "", v.type || "");
+  return n === "Tanning" ? "tan" : n === "Coaching" ? "lesson" : null;
+};
+
+const punch = (client, kind) => {
+  const cfg = CARDS[kind];
+  const visits = (client.history || []).filter((v) => cardFor(v) === kind).length;
+  const used = Number((client.freebies || {})[kind] || 0);
+  const earned = Math.floor(visits / cfg.every);
   const owed = Math.max(0, earned - used);
-  const toGo = owed > 0 ? 0 : 10 - (visits % 10);
-  return { visits, owed, toGo, tier: tierFor(visits) };
+  const onCard = visits % cfg.every;          // progress on the current card
+  const toGo = cfg.every - onCard;            // how many until the next free one
+  return { kind, visits, onCard, owed, toGo, ...cfg };
+};
+
+/* .visits, .owed and .tier keep their old meaning so the EVERYONE /
+   FREE ONE OWED filters and the tier badge carry on working untouched. */
+const loyalty = (client) => {
+  const lesson = punch(client, "lesson");
+  const tan = punch(client, "tan");
+  const visits = (client.history || []).length;
+  return { visits, lesson, tan, owed: lesson.owed + tan.owed, tier: tierFor(visits) };
 };
 
 /* ================= OFFERS, BUNDLES & MEMBERSHIPS =================
@@ -6473,7 +6496,7 @@ function CalendarTab({ B, events, saveEvents, pageants, savePageants, clients, d
       {e.notes && <div style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, marginTop: 3 }}>{e.notes}</div>}
       {e.kind === "event" && (
         <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
-          <button onClick={() => saveEvents(events.filter((x) => x.id !== e.id))} className="hq-mono" style={{ border: "none", background: "none", color: B.c.faint, fontSize: 9.5, letterSpacing: 2, padding: 0 }}>REMOVE</button>
+          <button onClick={() => { if (window.confirm(`Remove ${e.clientName || "this appointment"}${e.time ? ` at ${prettyTime(e.time)}` : ""}? This can't be undone.`)) saveEvents(events.filter((x) => x.id !== e.id)); }} className="hq-mono" style={{ border: "none", background: "none", color: B.c.faint, fontSize: 9.5, letterSpacing: 2, padding: 0 }}>REMOVE</button>
         </div>
       )}
     </div>
@@ -6958,13 +6981,18 @@ function MkqPublic({ B, settings = {} }) {
 function ClientsTab({ B, clients, saveClients, openPortal, clearSamples, hasSamples, settings = {} }) {
   const { Field, input, Primary, chip, card, H } = useBrandBits(B);
   const [filter, setFilter] = useState("all");
+  const [find, setFind] = useState("");
   const [adding, setAdding] = useState(false);
   const blank = { name: "", biz: { PP: false, VG: false, MKQ: false, DANCE: false, RE: false }, about: "", phone: "", bigDate: "", bigLabel: "", undertone: "", shade: "", skinNotes: "", division: "", goals: "" };
   const [form, setForm] = useState(blank);
   const [open, setOpen] = useState(null);
 
+  const needle = find.trim().toLowerCase();
   const shown = clients
     .filter((c) => filter === "all" ? true : filter === "owed" ? loyalty(c).owed > 0 : c.biz?.[filter])
+    .filter((c) => !needle
+      || String(c.name || "").toLowerCase().includes(needle)
+      || String(c.phone || "").replace(/\D/g, "").includes(needle.replace(/\D/g, "") || "\u0000"))
     .sort((a, b) => String(a.name || "").trim().localeCompare(String(b.name || "").trim(), "en", { sensitivity: "base" }));
   const addClient = async () => {
     if (!form.name.trim()) return;
@@ -6995,6 +7023,23 @@ function ClientsTab({ B, clients, saveClients, openPortal, clearSamples, hasSamp
         </div>
       )}
 
+      <div style={{ position: "relative", marginBottom: 10 }}>
+        <input value={find} onChange={(e) => setFind(e.target.value)}
+          placeholder="Search by name or phone…"
+          style={{ ...input, paddingRight: find ? 68 : 12 }} />
+        {find && (
+          <button onClick={() => setFind("")} className="hq-mono"
+            style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
+              border: "none", background: "transparent", color: B.c.faint, fontSize: 8.5, letterSpacing: 1.2 }}>
+            CLEAR
+          </button>
+        )}
+      </div>
+      {needle && (
+        <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.5, color: B.c.faint, marginBottom: 10 }}>
+          {shown.length} MATCH{shown.length === 1 ? "" : "ES"}
+        </div>
+      )}
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
         {[["all", "EVERYONE"], ["PP", "♛ PAGEANT"], ["VG", "✦ GLOW"], ["owed", "✦ FREE ONE OWED"]].map(([v, lab]) => (
           <button key={v} className="hq-mono" style={chip(filter === v)} onClick={() => setFilter(v)}>{lab}</button>
@@ -7073,15 +7118,15 @@ function ClientsTab({ B, clients, saveClients, openPortal, clearSamples, hasSamp
                           {L.tier.mark} {L.tier.name.toUpperCase()}
                         </span>
                       )}
-                      {L.owed > 0 && (
-                        <span className="hq-mono" style={{ flexShrink: 0, fontSize: 6.5, letterSpacing: 1, fontWeight: 700,
-                          borderRadius: 999, padding: "2px 7px", background: "#34C759", color: "#FFFFFF" }}>
-                          FREE ONE OWED
+                      {[L.lesson, L.tan].filter((p) => p.owed > 0).map((p) => (
+                        <span key={p.kind} className="hq-mono" style={{ flexShrink: 0, fontSize: 6.5, letterSpacing: 1, fontWeight: 700,
+                          borderRadius: 999, padding: "2px 7px", background: B.c.deep, color: B.c.gold }}>
+                          {p.mark} {p.free} OWED{p.owed > 1 ? ` ×${p.owed}` : ""}
                         </span>
-                      )}
+                      ))}
                       <span className="hq-mono" style={{ fontSize: 8.5, color: B.c.faint, letterSpacing: 1.2 }}>
-                        {L.visits} VISIT{L.visits === 1 ? "" : "S"}
-                        {L.visits > 0 && L.owed === 0 ? ` · ${L.toGo} TO A FREE ONE` : ""}
+                        {[L.lesson, L.tan].filter((p) => p.visits > 0)
+                          .map((p) => `${p.mark} ${p.visits} ${p.visits === 1 ? p.one : p.many}`).join("  ") || "NO VISITS YET"}
                         {c.shade ? ` · ${c.shade.toUpperCase()}` : ""}
                       </span>
                       <span style={{ color: B.c.accent, letterSpacing: 2, fontSize: 9 }}>{c.biz?.PP && "♛"}{c.biz?.VG && "✦"}</span>
@@ -7239,6 +7284,57 @@ function ClientDetail({ B, client, onClose, onChange, onDelete, onPortal, settin
       {infoRow("Skin notes", client.skinNotes)}
       {infoRow("Division", client.division)}
       {infoRow("Goals", client.goals)}
+
+      {/* ---- PUNCH CARDS ---- */}
+      <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 3, color: B.c.faint, margin: "18px 0 10px" }}>PUNCH CARDS</div>
+      {["lesson", "tan"].map((kind) => {
+        const p = punch(client, kind);
+        const used = Number((client.freebies || {})[kind] || 0);
+        const redeem = (delta) => onChange({
+          ...client,
+          freebies: { ...(client.freebies || {}), [kind]: Math.max(0, used + delta) },
+        });
+        return (
+          <div key={kind} style={{ background: B.c.card, border: `1px solid ${B.c.line}`,
+            borderLeft: `2px solid ${p.owed > 0 ? B.c.accent : B.c.line}`, borderRadius: 6,
+            padding: "10px 13px", marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <div>
+                <div style={{ fontWeight: 500, fontSize: 14 }}>
+                  {p.mark} {p.visits} {p.visits === 1 ? p.one.toLowerCase() : p.many.toLowerCase()}
+                </div>
+                <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 1.2, color: B.c.faint, marginTop: 2 }}>
+                  {p.owed > 0 ? `${p.free} OWED${p.owed > 1 ? ` ×${p.owed}` : ""} · ` : ""}
+                  {`${p.toGo} MORE FOR A FREE ${p.one}`}
+                  {used > 0 ? ` · ${used} REDEEMED` : ""}
+                </div>
+              </div>
+              {p.owed > 0 && (
+                <button onClick={() => redeem(1)} className="hq-mono"
+                  style={{ flexShrink: 0, padding: "8px 12px", borderRadius: 3, border: "none",
+                    background: B.c.deep, color: B.c.gold, fontSize: 8.5, letterSpacing: 1.5 }}>
+                  GAVE IT
+                </button>
+              )}
+              {p.owed === 0 && used > 0 && (
+                <button onClick={() => redeem(-1)} className="hq-mono"
+                  style={{ flexShrink: 0, padding: "8px 10px", borderRadius: 3, border: `1px solid ${B.c.line}`,
+                    background: "transparent", color: B.c.faint, fontSize: 8, letterSpacing: 1.2 }}>
+                  UNDO
+                </button>
+              )}
+            </div>
+            {/* the dots */}
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }}>
+              {Array.from({ length: p.every }, (_, i) => (
+                <span key={i} style={{ width: 9, height: 9, borderRadius: "50%",
+                  background: i < p.onCard ? B.c.accent : "transparent",
+                  border: `1px solid ${B.c.line}` }} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
 
       <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 3, color: B.c.faint, margin: "18px 0 10px" }}>VISIT HISTORY · {history.length}</div>
       {history.map((v) => (
