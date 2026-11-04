@@ -332,13 +332,20 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1.5px
   .hq-scrollrow { -webkit-mask-image: linear-gradient(to right, #000 0, #000 88%, transparent 100%);
                   mask-image: linear-gradient(to right, #000 0, #000 88%, transparent 100%); }
 }
-.hq-daygrid { display: flex; gap: 9px; align-items: flex-start; }
-@media (max-width: 620px) {
-  .hq-daygrid { flex-direction: column; }
-  .hq-daygrid > .hq-daystats { flex: 1 1 auto !important; width: 100%; flex-direction: row !important; }
-  .hq-daygrid > .hq-daystats > * { flex: 1 1 0; min-width: 0; }
-  .hq-daygrid > .hq-dayline { width: 100%; }
-}
+/* Settings: sections as a compact three-across grid of tiles; tapping one
+   opens it on its own, so nothing but that section is on screen. */
+.hq-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-items: stretch; }
+.hq-tiles > * { min-width: 0; }
+.hq-tile { -webkit-tap-highlight-color: transparent; }
+.hq-tile:hover { border-color: #B9B1D8; }
+@media (max-width: 330px) { .hq-tiles { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 760px) { .hq-tiles { grid-template-columns: repeat(4, 1fr); } }
+.hq-section { display: block; }
+
+/* Today: To Do and Your Day as two equal columns, schedule full width below */
+.hq-toprow { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; align-items: start; margin-bottom: 9px; }
+.hq-toprow > * { min-width: 0; }
+@media (max-width: 335px) { .hq-toprow { grid-template-columns: 1fr; } }
 ::selection { background: rgba(198,161,91,.26); }
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
@@ -3064,7 +3071,7 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
 
   /* built here so it can sit in a column beside the day */
   const todoPanel = (
-      <div style={{ ...card, padding: 0, marginBottom: 10, overflow: "hidden" }}>
+      <div style={{ ...card, padding: 0, overflow: "hidden" }}>
         <button onClick={() => { const v = !todoOpen; setTodoOpen(v); try { localStorage.setItem("hq-todo-shut", v ? "0" : "1"); } catch {} }}
           style={{ width: "100%", display: "flex", alignItems: "center", gap: 7, padding: "9px 11px",
             background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
@@ -3185,11 +3192,9 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
         </div>
       )}
 
-      {/* HER DAY — the shape of it, in her colours, beside the day itself */}
-      {todoPanel}
-
-      <div className="hq-daygrid" style={{ marginBottom: 4 }}>
-        {/* two separate boxes, half and half, beside the day */}
+      {/* TO DO and HER DAY — two equal columns, the schedule full width below */}
+      <div className="hq-toprow">
+        {todoPanel}
         {todayList.length > 0 && (() => {
           const real = todayList.filter((e) => e.time && !e.isGap);
           if (!real.length) return null;
@@ -3206,14 +3211,14 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
           const hrs = (m) => (m % 60 === 0 ? `${m / 60}h` : `${Math.floor(m / 60)}h${m % 60}m`);
 
           return (
-            <div className="hq-daystats" style={{ flex: "0 0 27%", minWidth: 0, display: "flex", flexDirection: "column", gap: 9 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
               {/* her day */}
               <div style={{ borderRadius: 10, overflow: "hidden",
                 background: `linear-gradient(165deg, ${B.c.deep} 0%, ${B.c.deep2} 100%)`,
                 boxShadow: "0 3px 12px rgba(20,15,10,.18)" }}>
                 <div style={{ padding: "10px 11px 8px", borderBottom: "1px solid rgba(255,255,255,.16)" }}>
-                  <div className="hq-mono" style={{ fontSize: 5.5, letterSpacing: 1.6, color: B.c.gold, opacity: 0.8 }}>YOUR DAY</div>
-                  <div className="hq-mono" style={{ fontSize: 9.5, fontWeight: 700, color: "#FFFFFF", marginTop: 4, letterSpacing: 0.3, whiteSpace: "nowrap" }}>
+                  <div className="hq-mono" style={{ fontSize: 7, letterSpacing: 1.8, color: B.c.gold, opacity: 0.8 }}>YOUR DAY</div>
+                  <div className="hq-mono" style={{ fontSize: 12, fontWeight: 700, color: "#FFFFFF", marginTop: 4, letterSpacing: 0.3, whiteSpace: "nowrap" }}>
                     {prettyTime(minToTime(firstAt)).replace(" ", "")}
                     <span style={{ opacity: 0.55 }}>&ndash;</span>
                     {prettyTime(minToTime(lastEnd)).replace(" ", "")}
@@ -3226,9 +3231,9 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
                   [String(left), "to go"],
                 ].map(([big, small], i) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 5,
-                    padding: "6px 11px", borderTop: i ? "1px solid rgba(255,255,255,.08)" : "none" }}>
-                    <span className="hq-mono" style={{ fontSize: 5.5, letterSpacing: 0.8, color: B.c.gold, opacity: 0.72 }}>{small.toUpperCase()}</span>
-                    <span className="hq-mono" style={{ fontSize: 11.5, fontWeight: 700, color: "#FFFFFF", lineHeight: 1 }}>{big}</span>
+                    padding: "8px 11px", borderTop: i ? "1px solid rgba(255,255,255,.08)" : "none" }}>
+                    <span className="hq-mono" style={{ fontSize: 7, letterSpacing: 1, color: B.c.gold, opacity: 0.72 }}>{small.toUpperCase()}</span>
+                    <span className="hq-mono" style={{ fontSize: 14, fontWeight: 700, color: "#FFFFFF", lineHeight: 1 }}>{big}</span>
                   </div>
                 ))}
               </div>
@@ -3274,8 +3279,9 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
             </div>
           );
         })()}
+      </div>
 
-        <div className="hq-dayline" style={{ ...card, flex: 1, minWidth: 0, padding: "12px 13px", borderLeft: `3px solid ${B.c.accent}` }}>
+      <div style={{ ...card, minWidth: 0, padding: "12px 13px", borderLeft: `3px solid ${B.c.accent}` }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
             <span className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: B.c.accent }}>
               TODAY&rsquo;S SCHEDULE &middot; {todayList.length} BOOKED
@@ -3411,7 +3417,6 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
             );
           })}
         </div>
-      </div>
 
       {/* Needs attention — dark so it pops */}
       {(requests.some((r) => r.kind !== "waitlist" && r.kind !== "intake") || leads.length > 0) && (
@@ -3962,43 +3967,52 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
 }
 
 /* ---------- Settings: one heading style, one panel style ---------- */
-/* A settings section that folds shut. The header always says where that
-   section stands, so she can see what is set up and what is still waiting
-   without opening a single one. */
+/* A settings section. On the grid it is just a tile — name and where it
+   stands, nothing else. Tapping one opens it as its own full page. */
 const FOLD_TONE = (B) => ({
   todo: { bg: B.c.deep, fg: B.c.gold },
   on:   { bg: B.c.soft, fg: B.c.accent },
   off:  { bg: "transparent", fg: B.c.faint },
 });
-const Fold = ({ B, title, note, status, tone = "off", open, onToggle, children }) => {
+const Fold = ({ B, id, title, note, status, tone = "off", openSection, onOpen, onBack, children }) => {
   const t = FOLD_TONE(B)[tone] || FOLD_TONE(B).off;
-  return (
-    <div style={{ border: `1px solid ${B.c.line}`, borderRadius: 10, background: "#FFFFFF",
-      marginBottom: 9, overflow: "hidden", boxShadow: open ? "0 2px 10px rgba(20,15,10,.06)" : "none" }}>
-      <button onClick={onToggle} aria-expanded={open} className="hq-press"
-        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "13px 14px",
-          background: "none", border: "none", textAlign: "left", cursor: "pointer" }}>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: "block", fontFamily: B.display, fontSize: 17.5, fontWeight: 600, color: B.c.ink, lineHeight: 1.2 }}>{title}</span>
-          {note && !open && (
-            <span style={{ display: "block", fontSize: 11.5, fontWeight: 300, color: B.c.faint, marginTop: 3, lineHeight: 1.45 }}>{note}</span>
+  if (openSection && openSection !== id) return null;
+
+  if (openSection === id) {
+    return (
+      <div className="hq-fade">
+        <button onClick={onBack} className="hq-mono hq-press"
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 13px 7px 9px",
+            marginBottom: 13, borderRadius: 999, border: `1px solid ${B.c.line}`, background: "#FFFFFF",
+            color: B.c.accent, fontSize: 8.5, letterSpacing: 1.6, cursor: "pointer" }}>
+          <span style={{ fontSize: 13, lineHeight: 1 }}>&lsaquo;</span> ALL SETTINGS
+        </button>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 9, marginBottom: note ? 3 : 12 }}>
+          <span style={{ flex: 1, fontFamily: B.display, fontSize: 25, fontWeight: 600, letterSpacing: 0.3, color: B.c.ink, lineHeight: 1.15 }}>{title}</span>
+          {status && (
+            <span className="hq-mono" style={{ flexShrink: 0, fontSize: 7, letterSpacing: 1.2, fontWeight: 700,
+              borderRadius: 999, padding: "3px 8px", background: t.bg, color: t.fg,
+              border: tone === "off" ? `1px solid ${B.c.line}` : "none" }}>{status}</span>
           )}
-        </span>
-        {status && (
-          <span className="hq-mono" style={{ flexShrink: 0, fontSize: 7, letterSpacing: 1.2, fontWeight: 700,
-            borderRadius: 999, padding: "3px 8px", background: t.bg, color: t.fg,
-            border: tone === "off" ? `1px solid ${B.c.line}` : "none" }}>{status}</span>
-        )}
-        <span aria-hidden style={{ flexShrink: 0, color: B.c.faint, fontSize: 17, lineHeight: 1,
-          transform: open ? "rotate(90deg)" : "none", transition: "transform .18s ease" }}>&rsaquo;</span>
-      </button>
-      {open && (
-        <div className="hq-fade" style={{ padding: "0 14px 15px" }}>
-          {note && <div style={{ fontSize: 12, fontWeight: 300, color: B.c.faint, margin: "0 0 11px", lineHeight: 1.55 }}>{note}</div>}
-          {children}
         </div>
-      )}
-    </div>
+        {note && <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 14px", lineHeight: 1.55 }}>{note}</p>}
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={() => onOpen(id)} className="hq-tile hq-press"
+      style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 8,
+        minHeight: 86, padding: "11px 11px 10px", borderRadius: 10, cursor: "pointer",
+        border: `1px solid ${tone === "todo" ? B.c.accent : B.c.line}`, background: "#FFFFFF", textAlign: "left" }}>
+      <span style={{ fontFamily: B.display, fontSize: 13.5, fontWeight: 600, color: B.c.ink, lineHeight: 1.22 }}>{title}</span>
+      {status
+        ? <span className="hq-mono" style={{ alignSelf: "flex-start", fontSize: 6.5, letterSpacing: 1, fontWeight: 700,
+            borderRadius: 999, padding: "3px 7px", background: t.bg, color: t.fg,
+            border: tone === "off" ? `1px solid ${B.c.line}` : "none", whiteSpace: "nowrap", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}>{status}</span>
+        : <span aria-hidden style={{ color: B.c.faint, opacity: 0.5, fontSize: 14, lineHeight: 1 }}>&rsaquo;</span>}
+    </button>
   );
 };
 
@@ -4117,22 +4131,34 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
     pp: bizCfg?.pp || defFor("pp"),
     vg: bizCfg?.vg || defFor("vg"),
   }));
-  const [pane, setPane] = useState("money");
-  /* which sections are open — remembered, so her place survives a reload */
-  const [openFold, setOpenFold] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("hq-folds") || "{}"); } catch { return {}; }
-  });
-  const toggleFold = (id) => setOpenFold((o) => {
-    const next = { ...o, [id]: !o[id] };
-    try { localStorage.setItem("hq-folds", JSON.stringify(next)); } catch {}
-    return next;
-  });
-  const jumpTo = (tab, id) => {
-    setPane(tab);
-    setOpenFold((o) => { const n = { ...o, [id]: true };
-      try { localStorage.setItem("hq-folds", JSON.stringify(n)); } catch {} return n; });
-    try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch {}
-  };
+  const [pane, setPane] = useState("alerts");
+  /* null = the tile grid; an id = that one section, open as its own page */
+  const [openSection, setOpenSection] = useState(null);
+  useEffect(() => { if (openSection) { try { window.scrollTo({ top: 0 }); } catch {} } }, [openSection]);
+  const toTop = () => { try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch {} };
+  const jumpTo = (tab, id) => { setPane(tab); setOpenSection(id); toTop(); };
+
+  /* Everything actually waiting on her, in one list — it feeds the ALERTS
+     tab badge and the card on that tab, so the two can never disagree. */
+  const alerts2 = [];
+  {
+    const waiting = reviews.filter((r) => r.approved === false).length;
+    if (waiting) alerts2.push({ t: `${waiting} review${waiting === 1 ? "" : "s"} waiting to go live`,
+      w: "Clients wrote these. Nobody sees them until you publish.", tab: "clients", id: "reviews" });
+    if (leads.length) alerts2.push({ t: `${leads.length} home valuation request${leads.length === 1 ? "" : "s"}`,
+      w: "Sent from your Home Team page.", tab: "clients", id: "valuation" });
+    if (pushState === "off") alerts2.push({ t: "Notifications are off",
+      w: "Turn them on and your phone buzzes the moment a client asks for something.", tab: "setup", id: "push" });
+    if (!settings.googleVG && !settings.googlePP) alerts2.push({ t: "No Google review links yet",
+      w: "Paste them in and a Google button appears for clients to leave a review.", tab: "setup", id: "google" });
+    if (!["ppFacebook", "vgInstagram", "mkqFacebook"].some((k) => settings[k])) alerts2.push({ t: "No social links on your brand pages",
+      w: "Add them and a follow button shows on each page.", tab: "setup", id: "social" });
+    if (!offers || !offers.length) alerts2.push({ t: "Bundles and memberships not set up",
+      w: "Fourteen are ready to switch on whenever you want them.", tab: "money", id: "offers" });
+    if (settings.mkqOpen && !settings.mkqUrl) alerts2.push({ t: "Registration is open with no Bombyhead link",
+      w: "The REGISTER button has nowhere to send people.", tab: "clients", id: "mkq" });
+  }
+  const alertCount = alerts2.length;
   const [saved, setSaved] = useState(false);
   const [alertForm, setAlertForm] = useState({ text: "", target: "ALL", expires: "" });
   const [pinDraft, setPinDraft] = useState(settings.pin || "");
@@ -4208,11 +4234,11 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
 
   return (
     <div className="hq-fade">
-      <H>Settings</H>
+      {!openSection && <H>Settings</H>}
 
       {/* which drawer */}
-      <div className="hq-scrollrow" style={{ display: "flex", gap: 5, marginBottom: 16, overflowX: "auto", paddingBottom: 2 }}>
-        {[["money", "BUSINESS"], ["clients", "CLIENTS"], ["setup", "SETUP"]].map(([v, lab]) => {
+      {!openSection && <div className="hq-scrollrow" style={{ display: "flex", gap: 5, marginBottom: 16, overflowX: "auto", paddingBottom: 2 }}>
+        {[["alerts", alertCount ? `ALERTS \u00b7 ${alertCount}` : "ALERTS"], ["money", "BUSINESS"], ["clients", "CLIENTS"], ["setup", "SETUP"]].map(([v, lab]) => {
           const on = pane === v;
           return (
             <button key={v} onClick={() => setPane(v)} className="hq-mono hq-press"
@@ -4222,41 +4248,24 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
             </button>
           );
         })}
-      </div>
+      </div>}
 
-      <p style={{ fontSize: 12, fontWeight: 300, color: B.c.faint, margin: "0 0 14px", lineHeight: 1.6 }}>
-        {pane === "money" ? "What you charge, what you sell, and what you've spent."
+      {!openSection && <p style={{ fontSize: 12, fontWeight: 300, color: B.c.faint, margin: "0 0 14px", lineHeight: 1.6 }}>
+        {pane === "alerts" ? "Anything waiting on you, in one place."
+          : pane === "money" ? "What you charge, what you sell, and what you've spent."
           : pane === "clients" ? "Everything your clients see, and everything they've sent you."
           : "Connections and one-time setup. Mostly set it and forget it."}
-      </p>
+      </p>}
 
       {/* WORTH A LOOK — only the things actually waiting on her. Each row
           jumps to that section and opens it. Vanishes when there is nothing. */}
-      {(() => {
-        const todo = [];
-        const waiting = reviews.filter((r) => r.approved === false).length;
-        if (waiting) todo.push({ t: `${waiting} review${waiting === 1 ? "" : "s"} waiting to go live`,
-          w: "Clients wrote these. Nobody sees them until you publish.", tab: "clients", id: "reviews" });
-        if (leads.length) todo.push({ t: `${leads.length} home valuation request${leads.length === 1 ? "" : "s"}`,
-          w: "Sent from your Home Team page.", tab: "clients", id: "valuation" });
-        if (pushState === "off") todo.push({ t: "Notifications are off",
-          w: "Turn them on and your phone buzzes the moment a client asks for something.", tab: "setup", id: "push" });
-        if (!settings.googleVG && !settings.googlePP) todo.push({ t: "No Google review links yet",
-          w: "Paste them in and a Google button appears for clients to leave a review.", tab: "setup", id: "google" });
-        if (!["ppFacebook", "vgInstagram", "mkqFacebook"].some((k) => settings[k])) todo.push({ t: "No social links on your brand pages",
-          w: "Add them and a follow button shows on each page.", tab: "setup", id: "social" });
-        if (!offers || !offers.length) todo.push({ t: "Bundles and memberships not set up",
-          w: "Fourteen are ready to switch on whenever you want them.", tab: "money", id: "offers" });
-        if (settings.mkqOpen && !settings.mkqUrl) todo.push({ t: "Registration is open with no Bombyhead link",
-          w: "The REGISTER button has nowhere to send people.", tab: "clients", id: "mkq" });
-        if (!todo.length) return null;
-        return (
+      {pane === "alerts" && !openSection && alerts2.length > 0 && (
           <div style={{ borderRadius: 11, overflow: "hidden", marginBottom: 16,
             background: `linear-gradient(165deg, ${B.c.deep} 0%, ${B.c.deep2} 100%)`,
             boxShadow: "0 3px 14px rgba(20,15,10,.2)" }}>
             <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 2.5, color: B.c.gold,
-              fontWeight: 500, padding: "12px 15px 8px" }}>WORTH A LOOK &middot; {todo.length}</div>
-            {todo.map((x, n) => (
+              fontWeight: 500, padding: "12px 15px 8px" }}>WORTH A LOOK &middot; {alerts2.length}</div>
+            {alerts2.map((x, n) => (
               <button key={x.id} onClick={() => jumpTo(x.tab, x.id)} className="hq-press"
                 style={{ display: "flex", width: "100%", alignItems: "center", gap: 10, textAlign: "left",
                   padding: "10px 15px", background: "none", border: "none",
@@ -4269,10 +4278,20 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
               </button>
             ))}
           </div>
-        );
-      })()}
+      )}
+
+      {pane === "alerts" && !openSection && alerts2.length === 0 && (
+        <div style={{ textAlign: "center", padding: "46px 24px", color: B.c.faint }}>
+          <div style={{ fontFamily: B.display, fontSize: 32, color: B.c.accent, marginBottom: 6 }}>&#10003;</div>
+          <p style={{ fontSize: 14, fontWeight: 300, margin: 0, lineHeight: 1.6 }}>
+            Nothing waiting on you. Anything that needs a look will turn up here.
+          </p>
+        </div>
+      )}
 
 
+      {/* the tiles — or, when one is open, that section on its own */}
+      <div className={openSection ? "hq-section" : "hq-tiles"}>
       {pane === "money" && (<>
       <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
         {[["pp", "♛ PAGEANT"], ["vg", "✦ GLOW"]].map(([v, lab]) => (
@@ -4280,7 +4299,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
         ))}
       </div>
 
-      <Fold B={B} id="prices" title={<>Services &amp; Prices</>} open={!!openFold["prices"]} onToggle={() => toggleFold("prices")}>
+      <Fold B={B} id="prices" title={<>Services &amp; Prices</>} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       {cur.services.map((s, i) => (
         <div key={s.id || i} style={{ ...card, padding: "11px 12px", marginBottom: 8 }}>
           <input style={{ ...input, marginBottom: 8, fontWeight: 500 }} value={s.name} onChange={(e) => updSvc(i, "name", e.target.value)} />
@@ -4308,7 +4327,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       </Fold>
 
       {/* Bundles & memberships */}
-      <Fold B={B} id="offers" title={<>Bundles &amp; Memberships</>} note="Every offer starts as a draft. Tick Live only when its Square link works — that is what clients pay through." status={(offers && offers.length ? `${offers.filter((o) => o.live).length} LIVE` : "NOT SET UP")} tone={(offers && offers.length ? "on" : "todo")} open={!!openFold["offers"]} onToggle={() => toggleFold("offers")}>
+      <Fold B={B} id="offers" title={<>Bundles &amp; Memberships</>} note="Every offer starts as a draft. Tick Live only when its Square link works — that is what clients pay through." status={(offers && offers.length ? `${offers.filter((o) => o.live).length} LIVE` : "NOT SET UP")} tone={(offers && offers.length ? "on" : "todo")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B) }}>
         {(() => {
           const list = (offers && offers.length ? offers : DEFAULT_OFFERS);
@@ -4435,7 +4454,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
 
       {pane === "clients" && (<>
       {/* Her accolades */}
-      <Fold B={B} id="titles" title={<>Your Titles</>} note="The lines under your name on the front page." status={(settings.accolades ? "SET" : "EMPTY")} tone={(settings.accolades ? "on" : "off")} open={!!openFold["titles"]} onToggle={() => toggleFold("titles")}>
+      <Fold B={B} id="titles" title={<>Your Titles</>} note="The lines under your name on the front page." status={(settings.accolades ? "SET" : "EMPTY")} tone={(settings.accolades ? "on" : "off")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B) }}>
         <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 9px", lineHeight: 1.6 }}>
           What sits under your name on the front page. One line each — they update the moment you tap away.
@@ -4448,7 +4467,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       </Fold>
 
       {/* Announcements */}
-      <Fold B={B} id="announce" title={<>Announcements</>} note="Banners on every client’s home page — specials, closures, reminders." status={(alerts.length ? `${alerts.length} LIVE` : "NONE")} tone={(alerts.length ? "on" : "off")} open={!!openFold["announce"]} onToggle={() => toggleFold("announce")}>
+      <Fold B={B} id="announce" title={<>Announcements</>} note="Banners on every client’s home page — specials, closures, reminders." status={(alerts.length ? `${alerts.length} LIVE` : "NONE")} tone={(alerts.length ? "on" : "off")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B) }}>
         <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 10px" }}>
           Posts show as banners on every client's home page — specials, closures, reminders.
@@ -4502,7 +4521,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
 
       {pane === "clients" && (<>
       {/* Miss Kentucky's Queen */}
-      <Fold B={B} id="mkq" title={<>Miss Kentucky&rsquo;s Queen</>} note="Registration, your Bombyhead link, and what the page says." status={(settings.mkqUrl ? (settings.mkqOpen ? "OPEN" : "CLOSED") : "NO LINK YET")} tone={(settings.mkqUrl ? "on" : "todo")} open={!!openFold["mkq"]} onToggle={() => toggleFold("mkq")}>
+      <Fold B={B} id="mkq" title={<>Miss Kentucky&rsquo;s Queen</>} note="Registration, your Bombyhead link, and what the page says." status={(settings.mkqUrl ? (settings.mkqOpen ? "OPEN" : "CLOSED") : "NO LINK YET")} tone={(settings.mkqUrl ? "on" : "todo")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B) }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 11 }}>
           <span style={{ fontSize: 13.5, fontWeight: 400 }}>Registration is open</span>
@@ -4535,7 +4554,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
 
       {pane === "setup" && (<>
       {/* Notifications */}
-      <Fold B={B} id="push" title={<>Notifications</>} note="A buzz when a client needs you." status={(pushState === "on" ? "ON" : pushState === "blocked" ? "BLOCKED" : pushState === "unsupported" ? "N/A" : "OFF")} tone={(pushState === "on" ? "on" : pushState === "unsupported" ? "off" : "todo")} open={!!openFold["push"]} onToggle={() => toggleFold("push")}>
+      <Fold B={B} id="push" title={<>Notifications</>} note="A buzz when a client needs you." status={(pushState === "on" ? "ON" : pushState === "blocked" ? "BLOCKED" : pushState === "unsupported" ? "N/A" : "OFF")} tone={(pushState === "on" ? "on" : pushState === "unsupported" ? "off" : "todo")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B) }}>
         <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 11px", lineHeight: 1.6 }}>
           Get a buzz on this phone the moment a client asks for a sooner spot or leaves a review — no need to keep checking.
@@ -4595,7 +4614,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       </Fold>
 
       {/* Calendar sync */}
-      <Fold B={B} id="calendar" title={<>Calendar Sync</>} note="Your work on your phone, and your own plans in here." status={(settings.personalFeed ? "CONNECTED" : "NOT SET UP")} tone={(settings.personalFeed ? "on" : "off")} open={!!openFold["calendar"]} onToggle={() => toggleFold("calendar")}>
+      <Fold B={B} id="calendar" title={<>Calendar Sync</>} note="Your work on your phone, and your own plans in here." status={(settings.personalFeed ? "CONNECTED" : "NOT SET UP")} tone={(settings.personalFeed ? "on" : "off")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B) }}>
         <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 2, color: B.c.accent, fontWeight: 700, marginBottom: 6 }}>1 · PUT YOUR WORK ON YOUR PHONE</div>
         <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 10px", lineHeight: 1.6 }}>
@@ -4698,7 +4717,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       </Fold>
 
       {/* Her invite wording */}
-      <Fold B={B} id="invite" title={<>Invite Message</>} note="What goes out when you tap the message icon. Your link is added at the end." status={(settings.inviteText ? "CUSTOM" : "DEFAULT")} tone={"off"} open={!!openFold["invite"]} onToggle={() => toggleFold("invite")}>
+      <Fold B={B} id="invite" title={<>Invite Message</>} note="What goes out when you tap the message icon. Your link is added at the end." status={(settings.inviteText ? "CUSTOM" : "DEFAULT")} tone={"off"} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B), marginBottom: 4 }}>
         <textarea style={{ ...input, minHeight: 108, lineHeight: 1.6 }}
           defaultValue={settings.inviteText || "Hey there!\n\nIt's Paige with Pageant Perfect & Velvet Glow! I want to invite you to my brand new booking site, where everything is all under one link. Take a look and let me know what you think! Scheduling is OPEN \u{1F90D}"}
@@ -4710,7 +4729,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       </Fold>
 
       {/* Socials */}
-      <Fold B={B} id="social" title={<>Social Links</>} note="Each one shows as a follow button on that brand\u2019s page. Leave any blank to hide it." status={`${["ppFacebook","vgInstagram","mkqFacebook","facebook","instagram"].filter((k) => settings[k]).length} OF 5`} tone={(["ppFacebook","vgInstagram","mkqFacebook"].some((k) => settings[k]) ? "on" : "todo")} open={!!openFold["social"]} onToggle={() => toggleFold("social")}>
+      <Fold B={B} id="social" title={<>Social Links</>} note="Each one shows as a follow button on that brand\u2019s page. Leave any blank to hide it." status={`${["ppFacebook","vgInstagram","mkqFacebook","facebook","instagram"].filter((k) => settings[k]).length} OF 5`} tone={(["ppFacebook","vgInstagram","mkqFacebook"].some((k) => settings[k]) ? "on" : "todo")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B) }}>
         {[
           ["ppFacebook", "\u265B Pageant Perfect \u2014 Facebook"],
@@ -4730,7 +4749,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       </Fold>
 
       {/* Google reviews */}
-      <Fold B={B} id="google" title={<>Google Reviews</>} note="Paste each profile’s review link and a Google button appears." status={((settings.googleVG ? 1 : 0) + (settings.googlePP ? 1 : 0) ? `${(settings.googleVG ? 1 : 0) + (settings.googlePP ? 1 : 0)} OF 2` : "NOT SET UP")} tone={(settings.googleVG || settings.googlePP ? "on" : "todo")} open={!!openFold["google"]} onToggle={() => toggleFold("google")}>
+      <Fold B={B} id="google" title={<>Google Reviews</>} note="Paste each profile’s review link and a Google button appears." status={((settings.googleVG ? 1 : 0) + (settings.googlePP ? 1 : 0) ? `${(settings.googleVG ? 1 : 0) + (settings.googlePP ? 1 : 0)} OF 2` : "NOT SET UP")} tone={(settings.googleVG || settings.googlePP ? "on" : "todo")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B) }}>
         <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 11px", lineHeight: 1.6 }}>
           Paste the "write a review" link from each Google Business Profile. A Google button appears on that brand's reviews page once it's here.
@@ -4749,7 +4768,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
 
       {pane === "setup" && (<>
       {/* Bring her Square book across */}
-      <Fold B={B} id="sqimport" title={<>Import From Square</>} note="Her customers from Square, matched on phone so nobody doubles up." status={`${clients.length} ON THE BOOKS`} tone={"off"} open={!!openFold["sqimport"]} onToggle={() => toggleFold("sqimport")}>
+      <Fold B={B} id="sqimport" title={<>Import From Square</>} note="Her customers from Square, matched on phone so nobody doubles up." status={`${clients.length} ON THE BOOKS`} tone={"off"} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B) }}>
         <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 11px", lineHeight: 1.6 }}>
           Brings over every customer with a name or a number. Anyone already in your book is left alone — it only adds
@@ -4818,7 +4837,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       </Fold>
 
       {/* work out who is who from what they have booked */}
-      <Fold B={B} id="sqsort" title={<>Sort Them Automatically</>} note="Reads what each client has actually booked and ticks Tanning or Pageant for them." open={!!openFold["sqsort"]} onToggle={() => toggleFold("sqsort")}>
+      <Fold B={B} id="sqsort" title={<>Sort Them Automatically</>} note="Reads what each client has actually booked and ticks Tanning or Pageant for them." openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B) }}>
         <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 11px", lineHeight: 1.6 }}>
           A client who has booked a glow becomes Tanning, a lesson becomes Pageant, and someone who
@@ -4878,7 +4897,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
     {pane === "clients" && (<>
 
       {/* Her season */}
-      <Fold B={B} id="season" title={<>Her 2026 Season</>} note="The pageants she is working this year. They show on the client site and feed Big Days." status={(pageants.length ? `${pageants.length} PAGEANTS` : "NOT SET UP")} tone={(pageants.length ? "on" : "todo")} open={!!openFold["season"]} onToggle={() => toggleFold("season")}>
+      <Fold B={B} id="season" title={<>Her 2026 Season</>} note="The pageants she is working this year. They show on the client site and feed Big Days." status={(pageants.length ? `${pageants.length} PAGEANTS` : "NOT SET UP")} tone={(pageants.length ? "on" : "todo")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B) }}>
         <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 11px", lineHeight: 1.6 }}>
           Adds the five she named, without dates. Open Calendar &rarr; Pageants to set each date and add her girls.
@@ -4948,7 +4967,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
 
         return (
           <>
-            <Fold B={B} id="interest" title={<>Contestant Interest</>} note="Anyone waiting on registration, grouped by division." open={!!openFold["interest"]} onToggle={() => toggleFold("interest")}>
+            <Fold B={B} id="interest" title={<>Contestant Interest</>} note="Anyone waiting on registration, grouped by division." openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
             <div style={{ ...panelStyle(B) }}>
               {entries.length === 0 ? (
                 <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: 0, lineHeight: 1.6 }}>
@@ -4994,7 +5013,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       })()}
 
       {/* Client portal invites */}
-      <Fold B={B} id="portal" title={<>Portal Invites</>} note="The link clients use to reach their own page." open={!!openFold["portal"]} onToggle={() => toggleFold("portal")}>
+      <Fold B={B} id="portal" title={<>Portal Invites</>} note="The link clients use to reach their own page." openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B) }}>
         <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 11px", lineHeight: 1.6 }}>
           Clients open their own page by entering the phone number you have on file — nothing to sign up for.
@@ -5115,7 +5134,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
 
         return (
           <>
-            <Fold B={B} id="gallery" title={<>Gallery</>} note="Two galleries, kept separate — her glows, and her girls&rsquo; crowns." status={`${gallery.length} PHOTOS`} tone={(gallery.length ? "on" : "off")} open={!!openFold["gallery"]} onToggle={() => toggleFold("gallery")}>
+            <Fold B={B} id="gallery" title={<>Gallery</>} note="Two galleries, kept separate — her glows, and her girls&rsquo; crowns." status={`${gallery.length} PHOTOS`} tone={(gallery.length ? "on" : "off")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
 
             {group("glow", "✦", BRANDS.vg.c.accent, "Glow Results",
               "Velvet Glow afters. Tag whose they are and they show on that client's own page too.",
@@ -5157,7 +5176,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
         );
         return (
           <>
-            <Fold B={B} id="reviews" title={<>Reviews</>} note="Nothing appears on your site until you publish it." status={(reviews.filter((r) => r.approved === false).length ? `${reviews.filter((r) => r.approved === false).length} WAITING` : `${reviews.filter((r) => r.approved !== false).length} LIVE`)} tone={(reviews.filter((r) => r.approved === false).length ? "todo" : "on")} open={!!openFold["reviews"]} onToggle={() => toggleFold("reviews")}>
+            <Fold B={B} id="reviews" title={<>Reviews</>} note="Nothing appears on your site until you publish it." status={(reviews.filter((r) => r.approved === false).length ? `${reviews.filter((r) => r.approved === false).length} WAITING` : `${reviews.filter((r) => r.approved !== false).length} LIVE`)} tone={(reviews.filter((r) => r.approved === false).length ? "todo" : "on")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
             {pending.length > 0 && (
               <div style={{ marginBottom: 12 }}>
                 <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 2, color: B.c.accent, marginBottom: 6, fontWeight: 600 }}>NEW — NOT SHOWING YET</div>
@@ -5178,7 +5197,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
 
       {pane === "clients" && (<>
       {/* Valuation requests */}
-      <Fold B={B} id="valuation" title={<>Valuation Requests</>} note="Sent from the Home Team page." status={(leads.length ? `${leads.length} WAITING` : "NONE")} tone={(leads.length ? "todo" : "off")} open={!!openFold["valuation"]} onToggle={() => toggleFold("valuation")}>
+      <Fold B={B} id="valuation" title={<>Valuation Requests</>} note="Sent from the Home Team page." status={(leads.length ? `${leads.length} WAITING` : "NONE")} tone={(leads.length ? "todo" : "off")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       {leads.length === 0 && <p style={{ fontSize: 13, fontWeight: 300, color: B.c.faint, margin: "0 0 14px" }}>None yet — requests from the Home Team page land here.</p>}
       {leads.map((l) => (
         <div key={l.id} style={{ ...card, padding: "12px 15px", marginBottom: 8, display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
@@ -5193,7 +5212,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       </>)}
 
       {pane === "money" && (<>
-        <Fold B={B} id="receipts" title={<>Receipts &amp; Income</>} note="Snap a receipt from Today and it lands here, read and filed." status={(index.length ? `${index.length} RECEIPTS` : "NONE YET")} tone={(index.length ? "on" : "off")} open={!!openFold["receipts"]} onToggle={() => toggleFold("receipts")}>
+        <Fold B={B} id="receipts" title={<>Receipts &amp; Income</>} note="Snap a receipt from Today and it lands here, read and filed." status={(index.length ? `${index.length} RECEIPTS` : "NONE YET")} tone={(index.length ? "on" : "off")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
         <div style={{ ...panelStyle(B) }}>
           {(() => {
             const year = String(new Date().getFullYear());
@@ -5238,7 +5257,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
 
       {pane === "setup" && (<>
       {/* Backup */}
-      <Fold B={B} id="backup" title={<>Backup</>} note="Everything, saved to this phone. Worth doing weekly." open={!!openFold["backup"]} onToggle={() => toggleFold("backup")}>
+      <Fold B={B} id="backup" title={<>Backup</>} note="Everything, saved to this phone. Worth doing weekly." openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B) }}>
         <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 10px" }}>
           Everything — clients, calendar, receipts, income, settings — saved to one file on your phone. Do this weekly; restore it here anytime.
@@ -5252,6 +5271,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       </div>
       </Fold>
       </>)}
+      </div>
     </div>
   );
 }
