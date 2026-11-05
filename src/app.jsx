@@ -425,7 +425,7 @@ const Icon = ({ name, size = 16, color = "currentColor", stroke = 1.6 }) => {
     sms: <><path d="M12 3C6.9 3 2.8 6.6 2.8 11c0 2.5 1.3 4.7 3.4 6.2 0 1.4-.7 2.9-2 3.9 1.9.1 3.8-.5 5.3-1.6 .8.2 1.6.3 2.5.3 5.1 0 9.2-3.6 9.2-8s-4.1-8-9.2-8Z" fill="currentColor" stroke="none" /></>,
     plus: <><path d="M12 5v14M5 12h14" /></>,
     close: <><path d="M18 6 6 18M6 6l12 12" /></>,
-    square: <><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M9 12h6" /></>,
+    square: <><path d="M20 11.5A8 8 0 0 0 6.3 6.3L4 8.5" /><path d="M4 4v4.5h4.5" /><path d="M4 12.5a8 8 0 0 0 13.7 5.2L20 15.5" /><path d="M20 20v-4.5h-4.5" /></>,
     calendar: <><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M8 3v4M16 3v4M3 10h18" /></>,
     check: <><path d="m5 13 4 4L19 7" /></>,
     star: <><path d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8Z" /></>,
@@ -3352,28 +3352,18 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
               {dayShape ? ` \u00b7 ${prettyTime(minToTime(dayShape.firstAt)).replace(" ", "")}\u2013${prettyTime(minToTime(dayShape.lastEnd)).replace(" ", "")}` : ""}
             </div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
             {[
-              { key: "cam", label: "Snap a receipt or a photo", icon: "camera", fn: () => camRef.current && camRef.current.click() },
-              { key: "msg", label: "Text a client their link", icon: "message", fn: () => onOpenMessages && onOpenMessages() },
-            ].map((b) => (
-              <button key={b.key} onClick={b.fn} aria-label={b.label} className="hq-press"
-                style={{ width: 33, height: 33, borderRadius: 9, display: "grid", placeItems: "center", cursor: "pointer",
-                  border: "1px solid rgba(255,255,255,.22)", background: "rgba(255,255,255,.08)", color: B.c.gold }}>
-                <Icon name={b.icon} size={15} />
-              </button>
-            ))}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
-            {[
+              { key: "cam", label: "Snap a receipt or a photo", icon: "camera", on: false, fn: () => camRef.current && camRef.current.click() },
+              { key: "msg", label: "Text a client their link", icon: "message", on: false, fn: () => onOpenMessages && onOpenMessages() },
               { key: "sq", label: "Sync bookings from Square", icon: "square", on: false, fn: () => onSyncSquare && onSyncSquare() },
               { key: "add", label: addOpen ? "Close" : "Add something", icon: addOpen ? "close" : "plus", on: addOpen, fn: () => setAddOpen(!addOpen) },
-            ].map((b) => (
-              <button key={b.key} onClick={b.fn} aria-label={b.label} className="hq-press"
+            ].map((b2) => (
+              <button key={b2.key} onClick={b2.fn} aria-label={b2.label} title={b2.label} className="hq-press"
                 style={{ width: 33, height: 33, borderRadius: 9, display: "grid", placeItems: "center", cursor: "pointer",
-                  border: `1px solid ${b.on ? B.c.gold : "rgba(255,255,255,.22)"}`,
-                  background: b.on ? "rgba(224,177,131,.2)" : "rgba(255,255,255,.08)", color: B.c.gold }}>
-                <Icon name={b.icon} size={15} />
+                  border: `1px solid ${b2.on ? B.c.gold : "rgba(255,255,255,.22)"}`,
+                  background: b2.on ? "rgba(224,177,131,.2)" : "rgba(255,255,255,.08)", color: B.c.gold }}>
+                <Icon name={b2.icon} size={15} />
               </button>
             ))}
           </div>
@@ -3418,7 +3408,7 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
       )}
 
 
-      <div style={{ ...card, minWidth: 0, padding: "12px 13px", borderLeft: `3px solid ${B.c.accent}` }}>
+      <div style={{ ...card, minWidth: 0, padding: "12px 13px", marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
             <span className="hq-mono" style={{ fontSize: 8, letterSpacing: 3, color: B.c.accent }}>
               TODAY&rsquo;S SCHEDULE &middot; {todayList.length} BOOKED
@@ -3536,17 +3526,25 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
             const t = tintFor(e2.type);
             return (
               <div key={e2.kind + e2.id} style={{
-                padding: "8px 11px", marginBottom: 5, borderRadius: 8,
-                background: t.bg, borderLeft: `3px solid ${t.edge}`,
+                display: "flex", alignItems: "center", gap: 9, padding: "7px 10px", marginBottom: 5, borderRadius: 9,
+                background: t.bg, borderLeft: `3px solid ${t.edge}`, opacity: 0.88,
               }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: t.ink, lineHeight: 1.35 }}>
-                  {e2.clientName || serviceLabel(e2.title, e2.type)}
-                  <span style={{ fontSize: 11, fontWeight: 300, opacity: 0.7, marginLeft: 6 }}>{serviceLabel(e2.title, e2.type)}</span>
-                  {(e2.mins || minsFromName(e2.title)) ? <span style={{ fontSize: 9, fontStyle: "italic", fontWeight: 300, opacity: 0.55, marginLeft: 4 }}>{lenLabel(e2.mins || minsFromName(e2.title))}</span> : null}
-                </div>
-                <div className="hq-mono" style={{ fontSize: 8.5, letterSpacing: 1, color: t.ink, opacity: 0.72, marginTop: 3 }}>
+                <span style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0, background: t.edge, color: "#FFFFFF",
+                  display: "grid", placeItems: "center", fontFamily: B.display, fontSize: 13, fontWeight: 600 }}>
+                  {String(e2.clientName || cleanTitle(e2.title) || "?").trim().charAt(0).toUpperCase()}
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontFamily: B.display, fontSize: 14, fontWeight: 600, color: B.c.ink, lineHeight: 1.2,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {e2.clientName || serviceLabel(e2.title, e2.type)}
+                  </span>
+                  <span style={{ display: "block", fontSize: 10.5, fontWeight: 300, color: t.ink, opacity: 0.75, marginTop: 1 }}>
+                    {serviceLabel(e2.title, e2.type)}{(e2.mins || minsFromName(e2.title)) ? ` \u00b7 ${lenLabel(e2.mins || minsFromName(e2.title))}` : ""}
+                  </span>
+                </span>
+                <span className="hq-mono" style={{ flexShrink: 0, fontSize: 8.5, letterSpacing: 0.8, color: t.ink, opacity: 0.8 }}>
                   {prettyTime(e2.time)}
-                </div>
+                </span>
               </div>
             );
           })}
@@ -3622,7 +3620,7 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
           (requests || []).filter((r) => r.kind === "waitlist").length +
           (clients || []).filter((c) => c.bigDate && c.bigDate >= today).length;
         return (
-          <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 10 }}>
             <button onClick={() => { const v = !laterOpen; setLaterOpen(v); try { localStorage.setItem("hq-later-shut", v ? "0" : "1"); } catch {} }}
               className="hq-press"
               style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 13px", borderRadius: 9,
@@ -3840,7 +3838,7 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
 
       {/* Monthly pulse */}
       {(pulseGlows > 0 || pulseLessons > 0) && (
-        <p style={{ textAlign: "center", fontFamily: B.display, fontStyle: "italic", fontSize: 14, color: B.c.faint, margin: "18px 0 4px", lineHeight: 1.6 }}>
+        <p style={{ textAlign: "center", fontFamily: B.display, fontStyle: "italic", fontSize: 14, color: B.c.faint, margin: "14px 0 2px", lineHeight: 1.6 }}>
           {pulseGlows} glow{pulseGlows === 1 ? "" : "s"} and {pulseLessons} lesson{pulseLessons === 1 ? "" : "s"} so far this {monthNameP}{isBusiest ? " — your busiest month this year." : "."}
         </p>
       )}
