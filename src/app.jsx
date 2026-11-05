@@ -342,10 +342,6 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1.5px
 @media (min-width: 760px) { .hq-tiles { grid-template-columns: repeat(4, 1fr); } }
 .hq-section { display: block; }
 
-/* Today: To Do and Your Day as two equal columns, schedule full width below */
-.hq-toprow { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; align-items: start; margin-bottom: 9px; }
-.hq-toprow > * { min-width: 0; }
-@media (max-width: 335px) { .hq-toprow { grid-template-columns: 1fr; } }
 ::selection { background: rgba(198,161,91,.26); }
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
@@ -1148,6 +1144,9 @@ export default function PaigeHQ() {
             }}
             onOpenCalendar={() => setTab("calendar")} onOpenVault={(v) => { setVaultView(v); setTab("vault"); }} onOpenClients={() => setTab("clients")} />
         )}
+        {tab === "todo" && mode === "paige" && (
+          <TodoTab B={B} todos={todos} saveTodos={saveTodos} />
+        )}
         {tab === "settings" && mode === "paige" && (
           <SettingsTab B={B} bizCfg={bizCfg} saveBizCfg={saveBizCfg} leads={leads} saveLeads={saveLeads} alerts={alerts} saveAlerts={saveAlerts}
             settings={settings} saveSettings={saveSettings} exportAll={exportAll} importAll={importAll} reviews={reviews} saveReviews={saveReviews}
@@ -1155,7 +1154,7 @@ export default function PaigeHQ() {
             index={index} income={income} mileage={mileage} setTab={setTab} setVaultView={setVaultView} requests={requests} pageants={pageants} savePageants={savePageants} />
         )}
         {tab === "home" && (brandKey === "hub"
-          ? <HubHome onGo={(k) => { switchBrand(k); setTab("home"); }} mkqLive={mkqLive} mkqDate={mkqSource?.date} daysToMkq={daysToMkq}
+          ? <HubHome onGo={(k) => { switchBrand(k); setTab("home"); }} mkqLive={mkqLive && mkqIsOn(settings)} mkqDate={mkqSource?.date} daysToMkq={daysToMkq}
               onPageants={() => { switchBrand("pp"); setCalView("pageants"); setTab("calendar"); }}
               alerts={alerts} pageants={pageants} onPaige={() => { setMode("paige"); setTab("today"); }} mode={mode} bizCfg={bizCfg}
               reviews={reviews} gallery={gallery} settings={settings} />
@@ -1175,20 +1174,32 @@ export default function PaigeHQ() {
       {mode === "paige" && (
       <nav className="hq-nav" style={{ background: B.c.card, borderTop: `2px solid ${B.c.deep}`, "--nav-accent": B.c.deep }}>
         <div className="hq-nav-inner">
-          {[["today", "Today", "clock"], ["calendar", "Calendar", "calendar"], ["clients", "Clients", "user"],
-            ["settings", "Settings", "sparkle"]].map(([key, label, icon]) => {
-            const on = tab === key;
-            return (
-              <button key={key} onClick={() => setTab(key)}
-                style={{ flex: 1, padding: "11px 0 calc(10px + env(safe-area-inset-bottom, 0px))", minHeight: 60,
-                  display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-                  background: on ? B.c.deep : "none", border: "none", cursor: "pointer",
-                  color: on ? B.c.gold : B.c.faint }}>
-                <Icon name={icon} size={20} stroke={on ? 2 : 1.6} />
-                <span style={{ fontSize: 9.5, letterSpacing: 0.3, fontWeight: on ? 700 : 500 }}>{label}</span>
-              </button>
-            );
-          })}
+          {(() => {
+            const todayKey = ymd();
+            const openTodos = (todos || []).filter((t) => (t.daily ? t.lastDone !== todayKey : !t.done)).length;
+            return [["today", "Today", "clock"], ["calendar", "Calendar", "calendar"], ["clients", "Clients", "user"],
+              ["todo", "To Do", "check"], ["settings", "Settings", "sparkle"]].map(([key, label, icon]) => {
+              const on = tab === key;
+              const badge = key === "todo" && openTodos > 0 ? openTodos : 0;
+              return (
+                <button key={key} onClick={() => setTab(key)}
+                  style={{ flex: 1, padding: "11px 0 calc(10px + env(safe-area-inset-bottom, 0px))", minHeight: 60,
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                    background: on ? B.c.deep : "none", border: "none", cursor: "pointer",
+                    color: on ? B.c.gold : B.c.faint }}>
+                  <span style={{ position: "relative", display: "grid", placeItems: "center" }}>
+                    <Icon name={icon} size={20} stroke={on ? 2 : 1.6} />
+                    {badge > 0 && (
+                      <span className="hq-mono" style={{ position: "absolute", top: -5, right: -11, minWidth: 14, height: 14,
+                        borderRadius: 999, padding: "0 3px", background: B.c.accent, color: "#FFFFFF",
+                        fontSize: 8, fontWeight: 700, display: "grid", placeItems: "center" }}>{badge}</span>
+                    )}
+                  </span>
+                  <span style={{ fontSize: 9.5, letterSpacing: 0.3, fontWeight: on ? 700 : 500 }}>{label}</span>
+                </button>
+              );
+            });
+          })()}
         </div>
       </nav>
       )}
@@ -1623,7 +1634,7 @@ function NewsTicker({ hub, alerts = [], gallery = [], reviews = [], pageants = [
   const items = [];
 
   /* the loudest thing first */
-  if (settings.mkqOpen) {
+  if (mkqIsOn(settings) && settings.mkqOpen) {
     items.push({
       key: "mkq",
       node: (
@@ -2442,7 +2453,17 @@ const pingPaige = (kind) => {
 };
 
 /* ================= MKQ LIVE COUNTDOWN (shared by both portals) ================= */
-function useMkqCountdown() {
+/* The pageant runs once a year. Everything about it stays hidden on the
+   client site until she switches the season back on in Settings. */
+const mkqIsOn = (settings = {}) => !!settings.mkqOn;
+const MKQ_FALLBACK_DATE = "2026-10-03";
+const mkqWhen = (settings = {}) => (settings.mkqDate || MKQ_FALLBACK_DATE);
+const mkqDayLabel = (settings = {}) => {
+  const d = new Date(mkqWhen(settings) + "T12:00");
+  return isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+};
+
+function useMkqCountdown(dateStr) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     let id = null;
@@ -2454,7 +2475,7 @@ function useMkqCountdown() {
     document.addEventListener("visibilitychange", onVis);
     return () => { stop(); document.removeEventListener("visibilitychange", onVis); };
   }, []);
-  const diff = Math.max(0, new Date("2026-10-03T00:00:00").getTime() - now);
+  const diff = Math.max(0, new Date((dateStr || MKQ_FALLBACK_DATE) + "T00:00:00").getTime() - now);
   return { diff, d: Math.floor(diff / 86400000), h: Math.floor(diff / 3600000) % 24, m: Math.floor(diff / 60000) % 60, s: Math.floor(diff / 1000) % 60 };
 }
 
@@ -2526,7 +2547,7 @@ function BroadcastSheet({ B, clients = [], settings = {}, onClose }) {
         style={{ ...input, minHeight: 96, marginBottom: 10, lineHeight: 1.55 }} />
 
       {list.length === 0 ? (
-        <Empty B={B} mark="\u2726" title="Nobody in this group yet"
+        <Empty B={B} mark="✦" title="Nobody in this group yet"
           body="They need a phone number on file. Tick Pageant or Glow on a client to sort them." />
       ) : (
         <>
@@ -2903,6 +2924,246 @@ const withBreaks = (list) => {
 /* The day drawn to scale. Blocks are as tall as they are long, gaps are
    real space, and a line shows where she is right now. */
 
+/* ================= TO DO =================
+   A real list, not a scratchpad. Every item remembers when it was made and
+   when it was ticked, and carries its own running notes so she can add
+   "called them, waiting to hear back" without losing the original line. */
+
+const todoIsDone = (t, today) => (t.daily ? t.lastDone === today : !!t.done);
+
+/* "Today 3:42 PM" for something that happened today, "Nov 3 · 3:42 PM" otherwise */
+const stamp = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return d.toDateString() === new Date().toDateString()
+    ? `Today ${time}`
+    : `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} · ${time}`;
+};
+const dueLabel = (due) => {
+  if (!due) return "";
+  const d = ymd();
+  if (due < d) return "OVERDUE";
+  if (due === d) return "DUE TODAY";
+  if (due === daysFromNow(1)) return "DUE TOMORROW";
+  return `DUE ${new Date(due + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase()}`;
+};
+
+function TodoTab({ B, todos = [], saveTodos }) {
+  const { input, Primary, chip, card, H, Field } = useBrandBits(B);
+  const [text, setText] = useState("");
+  const [filter, setFilter] = useState("open");
+  const [open, setOpen] = useState(null);
+  const today = ymd();
+
+  const done = (t) => todoIsDone(t, today);
+  const patch = (id, fn) => saveTodos(todos.map((t) => (t.id === id ? fn(t) : t)));
+
+  const add = async () => {
+    const v = text.trim();
+    if (!v) return;
+    await saveTodos([...todos, {
+      id: "t" + Date.now(), text: v, done: false,
+      createdAt: new Date().toISOString(), due: "", notes: [],
+    }]);
+    setText("");
+  };
+
+  /* Ticking stamps the moment. Un-ticking clears it, so the stamp is never a lie. */
+  const toggle = (id) => patch(id, (t) => {
+    if (t.daily) {
+      const off = t.lastDone === today;
+      return { ...t, lastDone: off ? "" : today, doneAt: off ? "" : new Date().toISOString() };
+    }
+    return { ...t, done: !t.done, doneAt: t.done ? "" : new Date().toISOString() };
+  });
+
+  const addNote = (id, note) => patch(id, (t) => ({
+    ...t, notes: [...(t.notes || []), { id: "n" + Date.now(), at: new Date().toISOString(), text: note }],
+  }));
+
+  const openCount = todos.filter((t) => !done(t)).length;
+  const doneCount = todos.length - openCount;
+  const shown = todos
+    .filter((t) => (filter === "open" ? !done(t) : filter === "done" ? done(t) : true))
+    .sort((a, b) => {
+      if (done(a) !== done(b)) return done(a) ? 1 : -1;
+      if (!done(a)) {
+        const ad = a.due || "9999", bd = b.due || "9999";
+        if (ad !== bd) return ad < bd ? -1 : 1;
+      }
+      return String(b.doneAt || b.createdAt || "").localeCompare(String(a.doneAt || a.createdAt || ""));
+    });
+
+  const item = open ? todos.find((t) => t.id === open) : null;
+
+  return (
+    <div className="hq-fade">
+      <H>To Do</H>
+      <div className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.6, color: B.c.faint, margin: "3px 0 14px" }}>
+        {openCount === 0 ? "ALL CLEAR" : `${openCount} OPEN`}{doneCount ? ` · ${doneCount} DONE` : ""}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <input style={{ ...input, flex: 1 }} placeholder="Something to get done…" value={text}
+          onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
+        <button onClick={add} disabled={!text.trim()} aria-label="Add to-do"
+          style={{ width: 46, borderRadius: 9, border: "none", cursor: text.trim() ? "pointer" : "default",
+            background: text.trim() ? B.c.deep : B.c.line, color: text.trim() ? B.c.gold : B.c.faint,
+            display: "grid", placeItems: "center" }}>
+          <Icon name="plus" size={17} />
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+        {[["open", "OPEN"], ["done", "DONE"], ["all", "EVERYTHING"]].map(([v, lab]) => (
+          <button key={v} className="hq-mono" style={chip(filter === v)} onClick={() => setFilter(v)}>{lab}</button>
+        ))}
+      </div>
+
+      {shown.length === 0 && (
+        <div style={{ textAlign: "center", padding: "44px 24px", color: B.c.faint }}>
+          <div style={{ fontFamily: B.display, fontSize: 30, color: B.c.accent }}>{"✓"}</div>
+          <p style={{ fontSize: 13.5, fontWeight: 300, lineHeight: 1.6 }}>
+            {filter === "done" ? "Nothing ticked off yet." : filter === "open" ? "Nothing on the list. Enjoy it." : "No to-dos yet."}
+          </p>
+        </div>
+      )}
+
+      <div className="hq-stagger">
+        {shown.map((t) => {
+          const isDone = done(t);
+          const notes = (t.notes || []).length;
+          const due = !isDone ? dueLabel(t.due) : "";
+          const overdue = due === "OVERDUE" || due === "DUE TODAY";
+          return (
+            <div key={t.id} style={{ ...card, padding: 0, marginBottom: 7, display: "flex", alignItems: "stretch",
+              borderLeft: `3px solid ${isDone ? B.c.line : overdue ? B.c.accent : "transparent"}` }}>
+              <button onClick={() => toggle(t.id)} aria-label={isDone ? `Mark ${t.text} not done` : `Mark ${t.text} done`}
+                style={{ flexShrink: 0, padding: "13px 2px 13px 13px", background: "none", border: "none", cursor: "pointer" }}>
+                <span style={{ display: "grid", placeItems: "center", width: 21, height: 21, borderRadius: "50%",
+                  border: `1.5px solid ${isDone ? B.c.accent : B.c.line}`, background: isDone ? B.c.accent : "transparent", color: "#FFFFFF" }}>
+                  {isDone && <Icon name="check" size={12} color="#FFFFFF" stroke={2.4} />}
+                </span>
+              </button>
+              <button onClick={() => setOpen(t.id)} style={{ flex: 1, minWidth: 0, textAlign: "left", padding: "11px 13px 11px 10px",
+                background: "none", border: "none", cursor: "pointer" }}>
+                <span style={{ display: "block", fontSize: 14, color: isDone ? B.c.faint : B.c.ink, lineHeight: 1.35,
+                  textDecoration: isDone ? "line-through" : "none" }}>{t.text}</span>
+                <span className="hq-mono" style={{ display: "flex", gap: 7, flexWrap: "wrap", fontSize: 7, letterSpacing: 1.1, color: B.c.faint, marginTop: 4 }}>
+                  {isDone && t.doneAt && <span style={{ color: B.c.accent }}>{`DONE ${stamp(t.doneAt).toUpperCase()}`}</span>}
+                  {due && <span style={{ color: overdue ? B.c.accent : B.c.faint, fontWeight: overdue ? 700 : 400 }}>{due}</span>}
+                  {t.daily && <span>EVERY DAY</span>}
+                  {notes > 0 && <span>{notes} UPDATE{notes === 1 ? "" : "S"}</span>}
+                  {!isDone && !due && !t.daily && !notes && t.createdAt && <span>ADDED {stamp(t.createdAt).toUpperCase()}</span>}
+                </span>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {item && (
+        <TodoDetail B={B} t={item} today={today} onClose={() => setOpen(null)}
+          onPatch={(fn) => patch(item.id, fn)}
+          onToggle={() => toggle(item.id)}
+          onNote={(n) => addNote(item.id, n)}
+          onDelete={async () => { await saveTodos(todos.filter((x) => x.id !== item.id)); setOpen(null); }} />
+      )}
+    </div>
+  );
+}
+
+function TodoDetail({ B, t, today, onClose, onPatch, onToggle, onNote, onDelete }) {
+  const { input, Field, Primary, card } = useBrandBits(B);
+  const [draft, setDraft] = useState(t.text);
+  const [note, setNote] = useState("");
+  const isDone = todoIsDone(t, today);
+  const notes = (t.notes || []).slice().sort((a, b) => String(b.at).localeCompare(String(a.at)));
+
+  return (
+    <Sheet B={B} onClose={onClose}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <button onClick={onToggle} aria-label={isDone ? "Mark not done" : "Mark done"}
+          style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          <span style={{ display: "grid", placeItems: "center", width: 28, height: 28, borderRadius: "50%",
+            border: `1.5px solid ${isDone ? B.c.accent : B.c.line}`, background: isDone ? B.c.accent : "transparent" }}>
+            {isDone && <Icon name="check" size={15} color="#FFFFFF" stroke={2.4} />}
+          </span>
+        </button>
+        <span style={{ flex: 1, fontFamily: B.display, fontSize: 15, fontWeight: 600, color: B.c.ink }}>
+          {isDone ? "Done" : "Still open"}
+        </span>
+        {isDone && t.doneAt && (
+          <span className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.2, color: B.c.accent, fontWeight: 700 }}>
+            {stamp(t.doneAt).toUpperCase()}
+          </span>
+        )}
+      </div>
+
+      <Field label="What it is">
+        <textarea style={{ ...input, minHeight: 58 }} value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => { const v = draft.trim(); if (v && v !== t.text) onPatch((x) => ({ ...x, text: v })); }} />
+      </Field>
+
+      <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <Field label="Due">
+            <input style={input} type="date" value={t.due || ""}
+              onChange={(e) => onPatch((x) => ({ ...x, due: e.target.value }))} />
+          </Field>
+        </div>
+        <div style={{ flex: 1 }}>
+          <Field label="Repeat">
+            <button onClick={() => onPatch((x) => ({ ...x, daily: !x.daily }))} className="hq-mono"
+              style={{ width: "100%", padding: "13px 8px", borderRadius: 4, cursor: "pointer", fontSize: 9, letterSpacing: 1.3,
+                border: `1px solid ${t.daily ? B.c.deep : B.c.line}`, background: t.daily ? B.c.deep : "transparent",
+                color: t.daily ? B.c.gold : B.c.faint }}>
+              {t.daily ? "EVERY DAY" : "ONE OFF"}
+            </button>
+          </Field>
+        </div>
+      </div>
+
+      <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 3, color: B.c.faint, margin: "16px 0 9px" }}>
+        UPDATES{notes.length ? ` · ${notes.length}` : ""}
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <input style={{ ...input, flex: 1 }} placeholder="What happened…" value={note}
+          onChange={(e) => setNote(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && note.trim()) { onNote(note.trim()); setNote(""); } }} />
+        <button onClick={() => { if (note.trim()) { onNote(note.trim()); setNote(""); } }} disabled={!note.trim()} className="hq-mono"
+          style={{ padding: "0 15px", borderRadius: 9, border: "none", cursor: note.trim() ? "pointer" : "default",
+            background: note.trim() ? B.c.deep : B.c.line, color: note.trim() ? B.c.gold : B.c.faint, fontSize: 8.5, letterSpacing: 1.4 }}>
+          ADD
+        </button>
+      </div>
+      {notes.length === 0 && (
+        <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "0 0 4px", lineHeight: 1.55 }}>
+          Nothing yet. Add a line whenever something moves — each one keeps its own date and time.
+        </p>
+      )}
+      {notes.map((n) => (
+        <div key={n.id} style={{ ...card, padding: "10px 13px", marginBottom: 7, borderLeft: `2px solid ${B.c.accent}` }}>
+          <div className="hq-mono" style={{ fontSize: 7, letterSpacing: 1.2, color: B.c.faint }}>{stamp(n.at).toUpperCase()}</div>
+          <div style={{ fontSize: 13.5, fontWeight: 300, color: B.c.ink, marginTop: 3, lineHeight: 1.5 }}>{n.text}</div>
+        </div>
+      ))}
+
+      <div className="hq-mono" style={{ fontSize: 7, letterSpacing: 1.2, color: B.c.faint, margin: "16px 0 10px" }}>
+        {t.createdAt ? `ADDED ${stamp(t.createdAt).toUpperCase()}` : ""}
+      </div>
+      <button onClick={onDelete} className="hq-mono"
+        style={{ width: "100%", padding: "11px 0", borderRadius: 6, border: `1px solid ${B.c.line}`,
+          background: "transparent", color: "#B3452F", fontSize: 8.5, letterSpacing: 1.6, cursor: "pointer" }}>
+        DELETE THIS
+      </button>
+    </Sheet>
+  );
+}
+
 /* ================= PAIGE'S TODAY (owner dashboard) ================= */
 const HYPE_NAMES = ["Paige", "Paigey", "Queen", "Beautiful", "Mrs. Paige"];
 const QUOTES = [
@@ -2976,6 +3237,24 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
         ? [upClient.shade, upClient.undertone, upClient.skinNotes].filter(Boolean).join(" · ")
         : [upClient.division, upClient.goals].filter(Boolean).join(" · "))
     : "";
+  /* The shape of her day — used by the header band and nothing else. */
+  const dayShape = (() => {
+    const real = todayList.filter((e) => e.time && !e.isGap);
+    if (!real.length) return null;
+    const mins = (t) => { const [h, m] = String(t || "0:0").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+    const lenOf = (e) => e.mins || minsFromName(e.title) || e.durMin || 60;
+    const firstAt = Math.min(...real.map((e) => mins(e.time)));
+    const lastEnd = Math.max(...real.map((e) => mins(e.time) + lenOf(e)));
+    const working = real.reduce((s2, e) => s2 + lenOf(e), 0);
+    const breaks = real.slice(0, -1).reduce((n, e, i) => {
+      const gap = mins(real[i + 1].time) - (mins(e.time) + lenOf(e));
+      return gap >= 25 ? n + 1 : n;
+    }, 0);
+    const left = real.filter((e) => !isPast(e)).length;
+    const hrs = (m) => (m % 60 === 0 ? `${m / 60}h` : `${Math.floor(m / 60)}h${m % 60}m`);
+    return { n: real.length, firstAt, lastEnd, working: hrs(working), breaks, left };
+  })();
+
   const dow = new Date().getDay();
   const weekStart = daysFromNow(-dow);
   const weekEnd = daysFromNow(6 - dow);
@@ -3048,7 +3327,7 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
   const prettyLong = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   const addTodo = async () => {
     if (!todoText.trim()) return;
-    await saveTodos([...todos, { id: "t" + Date.now(), text: todoText.trim(), done: false }]);
+    await saveTodos([...todos, { id: "t" + Date.now(), text: todoText.trim(), done: false, createdAt: new Date().toISOString(), due: "", notes: [] }]);
     setTodoText("");
   };
   /* A daily item is done only if it was ticked today — tomorrow it is waiting again. */
@@ -3070,111 +3349,73 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
   );
 
   /* built here so it can sit in a column beside the day */
-  const todoPanel = (
-      <div style={{ ...card, padding: 0, overflow: "hidden" }}>
-        <button onClick={() => { const v = !todoOpen; setTodoOpen(v); try { localStorage.setItem("hq-todo-shut", v ? "0" : "1"); } catch {} }}
-          style={{ width: "100%", display: "flex", alignItems: "center", gap: 7, padding: "9px 11px",
-            background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
-          <span style={{ fontFamily: B.display, fontSize: 13.5, fontWeight: 600, color: B.c.ink, lineHeight: 1 }}>To Do</span>
-          {openCount > 0 && (
-            <span className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.2, fontWeight: 700, borderRadius: 999,
-              padding: "3px 8px", background: B.c.accent, color: "#FFFFFF" }}>{openCount}</span>
-          )}
-          {openCount === 0 && todos.length > 0 && (
-            <span className="hq-mono" style={{ fontSize: 7.5, letterSpacing: 1.4, color: "#4E6B4E", fontWeight: 700 }}>ALL DONE ✓</span>
-          )}
-          <span style={{ flex: 1 }} />
-          <span style={{ color: B.c.faint, fontSize: 11 }}>{todoOpen ? "▾" : "▸"}</span>
-        </button>
-
-        {todoOpen && (
-          <div className="hq-fade" style={{ padding: "0 11px 11px" }}>
-            <div style={{ display: "flex", gap: 7, marginBottom: 10 }}>
-              <input value={todoText} onChange={(e) => setTodoText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") addTodo(); }}
-                placeholder="Something to get done…"
-                style={{ flex: 1, padding: "7px 9px", fontSize: 11.5, border: `1px solid ${B.c.line}`, borderRadius: 6, boxSizing: "border-box" }} />
-              <button onClick={addTodo} disabled={!todoText.trim()} className="hq-press"
-                style={{ padding: "0 15px", borderRadius: 7, border: "none", cursor: "pointer",
-                  background: todoText.trim() ? B.c.metal : "#DCD5CA", color: B.c.deep, fontSize: 16, fontWeight: 600 }}>+</button>
-            </div>
-
-            {todos.length === 0 && (
-              <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: "2px 0 0", lineHeight: 1.6 }}>
-                Nothing on the list yet.
-              </p>
-            )}
-
-            {[""].map((group) => {
-              const list = todos;
-              if (!list.length) return null;
-              return (
-                <div key={group}>
-                  {list.map((t) => {
-                    const done = isDone(t);
-                    return (
-                      <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
-                        <button onClick={() => toggleTodo(t.id)} aria-label={done ? "Mark not done" : "Mark done"}
-                          style={{ width: 16, height: 16, borderRadius: "50%", cursor: "pointer", flexShrink: 0, padding: 0,
-                            border: `1.5px solid ${done ? B.c.accent : B.c.faint}`,
-                            background: done ? B.c.accent : "transparent", color: "#fff", fontSize: 8.5, lineHeight: 1 }}>
-                          {done ? "✓" : ""}
-                        </button>
-                        <span style={{ flex: 1, fontSize: 11, fontWeight: 300, lineHeight: 1.4,
-                          textDecoration: done ? "line-through" : "none", color: done ? B.c.faint : B.c.ink }}>
-                          {t.text}
-                        </span>
-                        <button onClick={() => saveTodos(todos.filter((x) => x.id !== t.id))} aria-label="Remove"
-                          style={{ border: "none", background: "none", color: B.c.faint, fontSize: 13, padding: "2px 3px", cursor: "pointer", flexShrink: 0 }}>✕</button>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-
-            {todos.some((t) => !t.daily && t.done) && (
-              <button onClick={() => saveTodos(todos.filter((t) => t.daily || !t.done))} className="hq-mono hq-press"
-                style={{ border: "none", background: "none", color: B.c.faint, fontSize: 8, letterSpacing: 1.5,
-                  padding: "8px 0 0", cursor: "pointer" }}>
-                CLEAR WHAT IS DONE
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-  );
 
   return (
     <div className="hq-fade">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-        <div>
-          <H>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, {nick}</H>
-          <div className="hq-mono" style={{ fontSize: 9, letterSpacing: 2.5, color: B.c.faint, margin: "4px 0 12px" }}>{prettyLong.toUpperCase()}</div>
+
+      {/* ONE DARK BAND — who she is, the day, and its numbers, all in one block */}
+      <div style={{ borderRadius: 14, overflow: "hidden", marginBottom: 12,
+        background: `linear-gradient(170deg, ${B.c.deep2} 0%, ${B.c.deep} 100%)`,
+        boxShadow: "0 4px 16px rgba(20,15,10,.22)" }}>
+
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 10, padding: "15px 15px 13px" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: B.display, fontSize: 25, fontWeight: 600, color: "#FFFFFF", lineHeight: 1.12 }}>
+              Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, {nick}
+            </div>
+            <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 2, color: B.c.soft, opacity: 0.85, marginTop: 6 }}>
+              {prettyLong.toUpperCase()}
+              {dayShape ? ` \u00b7 ${prettyTime(minToTime(dayShape.firstAt)).replace(" ", "")}\u2013${prettyTime(minToTime(dayShape.lastEnd)).replace(" ", "")}` : ""}
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
+            {[
+              { key: "cam", label: "Snap a receipt or a photo", icon: "camera", fn: () => camRef.current && camRef.current.click() },
+              { key: "msg", label: "Text a client their link", icon: "message", fn: () => onOpenMessages && onOpenMessages() },
+            ].map((b) => (
+              <button key={b.key} onClick={b.fn} aria-label={b.label} className="hq-press"
+                style={{ width: 33, height: 33, borderRadius: 9, display: "grid", placeItems: "center", cursor: "pointer",
+                  border: "1px solid rgba(255,255,255,.22)", background: "rgba(255,255,255,.08)", color: B.c.gold }}>
+                <Icon name={b.icon} size={15} />
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
+            {[
+              { key: "sq", label: "Sync bookings from Square", icon: "square", on: false, fn: () => onSyncSquare && onSyncSquare() },
+              { key: "add", label: addOpen ? "Close" : "Add something", icon: addOpen ? "close" : "plus", on: addOpen, fn: () => setAddOpen(!addOpen) },
+            ].map((b) => (
+              <button key={b.key} onClick={b.fn} aria-label={b.label} className="hq-press"
+                style={{ width: 33, height: 33, borderRadius: 9, display: "grid", placeItems: "center", cursor: "pointer",
+                  border: `1px solid ${b.on ? B.c.gold : "rgba(255,255,255,.22)"}`,
+                  background: b.on ? "rgba(224,177,131,.2)" : "rgba(255,255,255,.08)", color: B.c.gold }}>
+                <Icon name={b.icon} size={15} />
+              </button>
+            ))}
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 7, flexShrink: 0, marginTop: 2 }}>
-          {[
-            { key: "cam", label: "Snap a receipt or a photo", icon: "camera", on: false, fn: () => camRef.current && camRef.current.click() },
-            { key: "msg", label: "Text a client their link", icon: "message", on: false, fn: () => onOpenMessages && onOpenMessages() },
-            { key: "sq", label: "Sync bookings from Square", icon: "square", on: false, fn: () => onSyncSquare && onSyncSquare() },
-            { key: "add", label: addOpen ? "Close" : "Add something", icon: addOpen ? "close" : "plus", on: addOpen, fn: () => setAddOpen(!addOpen) },
-          ].map((b) => (
-            <button key={b.key} onClick={b.fn} aria-label={b.label} className="hq-press"
-              style={{
-                width: 38, height: 38, borderRadius: 11, display: "grid", placeItems: "center", cursor: "pointer", border: "none",
-                background: b.on
-                  ? `linear-gradient(160deg, ${B.c.accent} 0%, ${B.c.deep} 120%)`
-                  : `linear-gradient(160deg, ${B.c.deep2} 0%, ${B.c.deep} 100%)`,
-                color: B.c.gold,
-                boxShadow: `0 3px 7px rgba(20,15,10,.30), inset 0 1px 0 rgba(255,255,255,.16), inset 0 -2px 4px rgba(0,0,0,.32)`,
-              }}>
-              <Icon name={b.icon} size={17} />
-            </button>
-          ))}
-        </div>
-        <input ref={camRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
-          onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f && onCapture) onCapture(f); e.target.value = ""; }} />
+
+        {dayShape && (
+          <div style={{ display: "flex", borderTop: "1px solid rgba(255,255,255,.17)" }}>
+            {[
+              [String(dayShape.n), "BOOKED", 1],
+              [dayShape.working, "WORKING", 1.25],
+              [String(dayShape.breaks), dayShape.breaks === 1 ? "BREAK" : "BREAKS", 1],
+              [String(dayShape.left), "TO GO", 1],
+            ].map(([big, small, fl], i) => (
+              <div key={small} style={{ flex: fl, textAlign: "center", padding: "11px 2px 12px",
+                borderLeft: i ? "1px solid rgba(255,255,255,.13)" : "none" }}>
+                <div className="hq-mono" style={{ fontSize: 17, fontWeight: 700, color: "#FFFFFF", lineHeight: 1 }}>{big}</div>
+                <div className="hq-mono" style={{ fontSize: 6.5, letterSpacing: 1.3, color: B.c.gold, marginTop: 5 }}>{small}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      <input ref={camRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+        onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f && onCapture) onCapture(f); e.target.value = ""; }} />
+
 
       {addOpen && (
         <div className="hq-fade" style={{ ...card, padding: 14, marginBottom: 14 }}>
@@ -3192,94 +3433,52 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
         </div>
       )}
 
-      {/* TO DO and HER DAY — two equal columns, the schedule full width below */}
-      <div className="hq-toprow">
-        {todoPanel}
-        {todayList.length > 0 && (() => {
-          const real = todayList.filter((e) => e.time && !e.isGap);
-          if (!real.length) return null;
-          const mins = (t) => { const [h, m] = String(t || "0:0").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
-          const lenOf = (e) => e.mins || minsFromName(e.title) || e.durMin || 60;
-          const firstAt = Math.min(...real.map((e) => mins(e.time)));
-          const lastEnd = Math.max(...real.map((e) => mins(e.time) + lenOf(e)));
-          const working = real.reduce((s2, e) => s2 + lenOf(e), 0);
-          const breaks = real.slice(0, -1).reduce((n, e, i) => {
-            const gap = mins(real[i + 1].time) - (mins(e.time) + lenOf(e));
-            return gap >= 25 ? n + 1 : n;
-          }, 0);
-          const left = real.filter((e) => !isPast(e)).length;
-          const hrs = (m) => (m % 60 === 0 ? `${m / 60}h` : `${Math.floor(m / 60)}h${m % 60}m`);
+      {/* UP NEXT — the one thing she most often opens the app to check */}
+      {upNext && (
+        <div style={{ ...card, padding: 0, overflow: "hidden", marginBottom: 12, borderLeft: `3px solid ${B.c.accent}` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 13px 0" }}>
+            <span className="hq-mono" style={{ fontSize: 7, letterSpacing: 2.4, color: B.c.accent, fontWeight: 700 }}>UP NEXT</span>
+            <span style={{ flex: 1 }} />
+            <span className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.2, color: B.c.faint }}>{upWhen}</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 13px 11px" }}>
+            {upClient && upClient.photo
+              ? <img src={`data:image/jpeg;base64,${upClient.photo}`} alt="" style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: `1.5px solid ${B.c.line}` }} />
+              : <span style={{ width: 48, height: 48, borderRadius: "50%", background: B.c.accent, color: "#FFFFFF", fontFamily: B.display, fontSize: 21, fontWeight: 600, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                  {String(upNext.clientName || cleanTitle(upNext.title) || "?").trim().charAt(0).toUpperCase()}
+                </span>}
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontFamily: B.display, fontSize: 21, fontWeight: 600, color: B.c.ink, lineHeight: 1.12 }}>
+                {upNext.clientName || cleanTitle(upNext.title)}
+              </span>
+              <span style={{ display: "block", fontSize: 12, fontWeight: 300, color: B.c.faint, marginTop: 2 }}>
+                {serviceLabel(upNext.title, upNext.type)}{(upNext.mins || minsFromName(upNext.title)) ? ` \u00b7 ${lenLabel(upNext.mins || minsFromName(upNext.title))}` : ""}
+              </span>
+              {upNotes && <span style={{ display: "block", fontSize: 11.5, fontWeight: 300, color: B.c.faint, opacity: 0.85, marginTop: 3 }}>{upNotes}</span>}
+            </span>
+            <span className="hq-mono" style={{ fontSize: 14, fontWeight: 700, color: B.c.deep, flexShrink: 0 }}>{prettyTime(upNext.time)}</span>
+          </div>
+          <div style={{ display: "flex", gap: 6, padding: "0 13px 12px" }}>
+            {(() => {
+              const ph = String((upClient && upClient.phone) || "").replace(/\D/g, "").slice(-10);
+              return (
+                <>
+                  {ph
+                    ? <a href={`sms:+1${ph}`} className="hq-mono hq-press" style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 7, textDecoration: "none", background: B.c.deep, color: B.c.gold, fontSize: 8.5, letterSpacing: 1.5, fontWeight: 700 }}>TEXT HER</a>
+                    : <span className="hq-mono" style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 7, background: B.c.soft, color: B.c.faint, fontSize: 8.5, letterSpacing: 1.5 }}>NO NUMBER</span>}
+                  {upClient && (
+                    <button onClick={() => onOpenPortal && onOpenPortal(upClient.id)} className="hq-mono hq-press"
+                      style={{ flex: 1, padding: "10px 0", borderRadius: 7, border: `1px solid ${B.c.line}`, background: "transparent", color: B.c.accent, fontSize: 8.5, letterSpacing: 1.5, cursor: "pointer" }}>HER PAGE</button>
+                  )}
+                  <button onClick={() => setLogging(upNext)} className="hq-mono hq-press"
+                    style={{ flex: 1, padding: "10px 0", borderRadius: 7, border: `1px solid ${B.c.line}`, background: "transparent", color: B.c.accent, fontSize: 8.5, letterSpacing: 1.5, cursor: "pointer" }}>LOG IT</button>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
-          return (
-            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-              {/* her day */}
-              <div style={{ borderRadius: 10, overflow: "hidden",
-                background: `linear-gradient(165deg, ${B.c.deep} 0%, ${B.c.deep2} 100%)`,
-                boxShadow: "0 3px 12px rgba(20,15,10,.18)" }}>
-                <div style={{ padding: "10px 11px 8px", borderBottom: "1px solid rgba(255,255,255,.16)" }}>
-                  <div className="hq-mono" style={{ fontSize: 7, letterSpacing: 1.8, color: B.c.gold, opacity: 0.8 }}>YOUR DAY</div>
-                  <div className="hq-mono" style={{ fontSize: 12, fontWeight: 700, color: "#FFFFFF", marginTop: 4, letterSpacing: 0.3, whiteSpace: "nowrap" }}>
-                    {prettyTime(minToTime(firstAt)).replace(" ", "")}
-                    <span style={{ opacity: 0.55 }}>&ndash;</span>
-                    {prettyTime(minToTime(lastEnd)).replace(" ", "")}
-                  </div>
-                </div>
-                {[
-                  [String(real.length), "booked"],
-                  [hrs(working), "working"],
-                  [String(breaks), breaks === 1 ? "break" : "breaks"],
-                  [String(left), "to go"],
-                ].map(([big, small], i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 5,
-                    padding: "8px 11px", borderTop: i ? "1px solid rgba(255,255,255,.08)" : "none" }}>
-                    <span className="hq-mono" style={{ fontSize: 7, letterSpacing: 1, color: B.c.gold, opacity: 0.72 }}>{small.toUpperCase()}</span>
-                    <span className="hq-mono" style={{ fontSize: 14, fontWeight: 700, color: "#FFFFFF", lineHeight: 1 }}>{big}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* the pageant, its own box */}
-              {cd && cd.diff > 0 && (
-                <div style={{ borderRadius: 10, overflow: "hidden", background: "#06070A",
-                  border: "1px solid rgba(110,193,214,.28)", boxShadow: "0 3px 12px rgba(6,7,10,.24)" }}>
-                  <img src={MKQ_LOGO} alt="Miss Kentucky's Queen" style={{ width: "100%", display: "block" }} />
-                  <div style={{ display: "flex", gap: 3, padding: "8px 7px 0" }}>
-                    {[[cd.d, "DAYS"], [cd.h, "HRS"], [cd.m, "MIN"], [cd.s, "SEC"]].map(([v, u]) => (
-                      <span key={u} style={{ flex: 1, textAlign: "center", padding: "5px 0", borderRadius: 3,
-                        background: "rgba(110,193,214,.12)", border: "1px solid rgba(110,193,214,.22)" }}>
-                        <span className="hq-mono" style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#FFFFFF", lineHeight: 1 }}>
-                          {String(v).padStart(2, "0")}
-                        </span>
-                        <span className="hq-mono" style={{ display: "block", fontSize: 4, letterSpacing: 0.6, color: "#6EC1D6", marginTop: 3 }}>{u}</span>
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* the two things she actually does with the pageant */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "7px 7px 8px" }}>
-                    <a href={`sms:&body=${encodeURIComponent(
-                        `Miss Kentucky's Queen \u2014 October 3, 2026 at Grayson County Middle School. Registration is open now: ${clientSite(settings)}/?b=mkq`
-                      )}`}
-                      className="hq-mono hq-press"
-                      style={{ display: "block", padding: "7px 0", borderRadius: 4, textAlign: "center", textDecoration: "none",
-                        background: "linear-gradient(95deg,#0E7C80,#12939A 45%,#6EC1D6)", color: "#04161A",
-                        fontSize: 6.5, letterSpacing: 1.2, fontWeight: 700 }}>
-                      SHARE THE PAGEANT
-                    </a>
-                    <a href={(settings.mkqUrl || "https://bombyhead.com/contest.php?contestid=c5224").trim()}
-                      target="_blank" rel="noreferrer" className="hq-mono hq-press"
-                      style={{ display: "block", padding: "7px 0", borderRadius: 4, textAlign: "center", textDecoration: "none",
-                        border: "1px solid rgba(110,193,214,.4)", color: "#6EC1D6",
-                        fontSize: 6.5, letterSpacing: 1.2, fontWeight: 700 }}>
-                      OPEN BOMBYHEAD
-                    </a>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })()}
-      </div>
 
       <div style={{ ...card, minWidth: 0, padding: "12px 13px", borderLeft: `3px solid ${B.c.accent}` }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
@@ -3848,6 +4047,7 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
           ))}
         </div>
 
+        {mkqIsOn(settings) && (<>
         <button onClick={() => onGo("mkq")} className="hq-press"
           style={{ width: "100%", display: "block", border: "none", cursor: "pointer", padding: 0, marginTop: 9,
             borderRadius: 12, overflow: "hidden", background: "linear-gradient(165deg, #06070A 12%, #101A1E 100%)",
@@ -3877,6 +4077,7 @@ function HubHome({ onGo, mkqLive, mkqDate, daysToMkq, alerts = [], pageants = []
           MISS KENTUCKY&rsquo;S QUEEN &middot; OCTOBER 3, 2026<br />
           DIRECTED BY PAIGE HENDERSON &amp; CHANDRA HORNBACK
         </div>
+        </>)}
       </div>
 
       {/* Henderson Home Team — the quiet fourth, in its own colours */}
@@ -4137,6 +4338,23 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
   useEffect(() => { if (openSection) { try { window.scrollTo({ top: 0 }); } catch {} } }, [openSection]);
   const toTop = () => { try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch {} };
   const jumpTo = (tab, id) => { setPane(tab); setOpenSection(id); toTop(); };
+  const [saved, setSaved] = useState(false);
+  const [alertForm, setAlertForm] = useState({ text: "", target: "ALL", expires: "" });
+  const [pinDraft, setPinDraft] = useState(settings.pin || "");
+  const [pinSaved, setPinSaved] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [siteCopied, setSiteCopied] = useState(false);
+  const [sqBusy, setSqBusy] = useState(false);
+  const [sortBusy, setSortBusy] = useState(false);
+  const [offerOpen, setOfferOpen] = useState("");
+  const [sortMsg, setSortMsg] = useState("");
+  const [sqAllBusy, setSqAllBusy] = useState(false);
+  const [sqAllMsg, setSqAllMsg] = useState("");
+  const [sqMsg, setSqMsg] = useState("");
+  const [calCopied, setCalCopied] = useState(false);
+  const [pushState, setPushState] = useState("off");
+  const [pushMsg, setPushMsg] = useState("");
+  useEffect(() => { pushStatus().then(setPushState); }, []);
 
   /* Everything actually waiting on her, in one list — it feeds the ALERTS
      tab badge and the card on that tab, so the two can never disagree. */
@@ -4155,27 +4373,10 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       w: "Add them and a follow button shows on each page.", tab: "setup", id: "social" });
     if (!offers || !offers.length) alerts2.push({ t: "Bundles and memberships not set up",
       w: "Fourteen are ready to switch on whenever you want them.", tab: "money", id: "offers" });
-    if (settings.mkqOpen && !settings.mkqUrl) alerts2.push({ t: "Registration is open with no Bombyhead link",
+    if (mkqIsOn(settings) && settings.mkqOpen && !settings.mkqUrl) alerts2.push({ t: "Registration is open with no Bombyhead link",
       w: "The REGISTER button has nowhere to send people.", tab: "clients", id: "mkq" });
   }
   const alertCount = alerts2.length;
-  const [saved, setSaved] = useState(false);
-  const [alertForm, setAlertForm] = useState({ text: "", target: "ALL", expires: "" });
-  const [pinDraft, setPinDraft] = useState(settings.pin || "");
-  const [pinSaved, setPinSaved] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [siteCopied, setSiteCopied] = useState(false);
-  const [sqBusy, setSqBusy] = useState(false);
-  const [sortBusy, setSortBusy] = useState(false);
-  const [offerOpen, setOfferOpen] = useState("");
-  const [sortMsg, setSortMsg] = useState("");
-  const [sqAllBusy, setSqAllBusy] = useState(false);
-  const [sqAllMsg, setSqAllMsg] = useState("");
-  const [sqMsg, setSqMsg] = useState("");
-  const [calCopied, setCalCopied] = useState(false);
-  const [pushState, setPushState] = useState("off");
-  const [pushMsg, setPushMsg] = useState("");
-  useEffect(() => { pushStatus().then(setPushState); }, []);
   const [feedMsg, setFeedMsg] = useState("");
   const [siteSaved, setSiteSaved] = useState(false);
   const [siteDraft, setSiteDraft] = useState(settings.clientSite || CLIENT_SITE_DEFAULT);
@@ -4521,8 +4722,45 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
 
       {pane === "clients" && (<>
       {/* Miss Kentucky's Queen */}
-      <Fold B={B} id="mkq" title={<>Miss Kentucky&rsquo;s Queen</>} note="Registration, your Bombyhead link, and what the page says." status={(settings.mkqUrl ? (settings.mkqOpen ? "OPEN" : "CLOSED") : "NO LINK YET")} tone={(settings.mkqUrl ? "on" : "todo")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
+      <Fold B={B} id="mkq" title={<>Miss Kentucky&rsquo;s Queen</>} note="Registration, your Bombyhead link, and what the page says." status={(!settings.mkqOn ? "HIDDEN" : settings.mkqUrl ? (settings.mkqOpen ? "OPEN" : "CLOSED") : "NO LINK YET")} tone={(!settings.mkqOn ? "off" : settings.mkqUrl ? "on" : "todo")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B) }}>
+        {/* the season switch — everything below it only matters when this is on */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+          paddingBottom: 12, marginBottom: 12, borderBottom: `1px solid ${B.c.line}` }}>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", fontSize: 13.5, fontWeight: 500 }}>Show the pageant this year</span>
+            <span style={{ display: "block", fontSize: 11.5, fontWeight: 300, color: B.c.faint, marginTop: 3, lineHeight: 1.5 }}>
+              Off, Miss Kentucky&rsquo;s Queen disappears from the client site entirely &mdash; the card, the menu tile,
+              the ticker and the page. Switch it back on when next year&rsquo;s date is set.
+            </span>
+          </span>
+          <button onClick={() => saveSettings({ ...settings, mkqOn: !settings.mkqOn })}
+            className="hq-press" aria-label="Show the pageant this year"
+            style={{ flexShrink: 0, width: 52, height: 29, borderRadius: 999, border: "none", cursor: "pointer", padding: 3,
+              background: settings.mkqOn ? B.c.accent : "#CBC2B4", display: "flex",
+              justifyContent: settings.mkqOn ? "flex-end" : "flex-start" }}>
+            <span style={{ width: 23, height: 23, borderRadius: "50%", background: "#fff", display: "block" }} />
+          </button>
+        </div>
+
+        {!settings.mkqOn && (
+          <p style={{ fontSize: 12.5, fontWeight: 300, color: B.c.faint, margin: 0, lineHeight: 1.6 }}>
+            Hidden from clients right now. Everything below is kept exactly as it is &mdash; set next
+            year&rsquo;s date, then switch it back on.
+          </p>
+        )}
+
+        <div style={{ display: settings.mkqOn ? "block" : "none" }}>
+        <label style={{ display: "block", marginBottom: 12 }}>
+          <span className="hq-mono" style={{ display: "block", fontSize: 8, letterSpacing: 2, color: B.c.faint, marginBottom: 5 }}>PAGEANT DATE</span>
+          <input type="date" value={settings.mkqDate || "2026-10-03"}
+            onChange={(e) => saveSettings({ ...settings, mkqDate: e.target.value })}
+            style={{ width: "100%", padding: "11px 12px", borderRadius: 4, border: `1px solid ${B.c.line}`, fontSize: 14, background: "#fff", color: B.c.ink, boxSizing: "border-box" }} />
+          <span style={{ display: "block", fontSize: 11.5, fontWeight: 300, color: B.c.faint, marginTop: 5, lineHeight: 1.5 }}>
+            Drives the countdown and the dates clients see.
+          </span>
+        </label>
+
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 11 }}>
           <span style={{ fontSize: 13.5, fontWeight: 400 }}>Registration is open</span>
           <button onClick={() => saveSettings({ ...settings, mkqOpen: !settings.mkqOpen })}
@@ -4547,6 +4785,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
         <textarea style={{ ...input, minHeight: 66 }} placeholder="What the page should say (optional — leave blank for the default)"
           defaultValue={settings.mkqBlurb || ""}
           onBlur={(e) => saveSettings({ ...settings, mkqBlurb: e.target.value.trim() })} />
+        </div>
       </div>
       </Fold>
 
@@ -4729,7 +4968,7 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
       </Fold>
 
       {/* Socials */}
-      <Fold B={B} id="social" title={<>Social Links</>} note="Each one shows as a follow button on that brand\u2019s page. Leave any blank to hide it." status={`${["ppFacebook","vgInstagram","mkqFacebook","facebook","instagram"].filter((k) => settings[k]).length} OF 5`} tone={(["ppFacebook","vgInstagram","mkqFacebook"].some((k) => settings[k]) ? "on" : "todo")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
+      <Fold B={B} id="social" title={<>Social Links</>} note="Each one shows as a follow button on that brand’s page. Leave any blank to hide it." status={`${["ppFacebook","vgInstagram","mkqFacebook","facebook","instagram"].filter((k) => settings[k]).length} OF 5`} tone={(["ppFacebook","vgInstagram","mkqFacebook"].some((k) => settings[k]) ? "on" : "todo")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
       <div style={{ ...panelStyle(B) }}>
         {[
           ["ppFacebook", "\u265B Pageant Perfect \u2014 Facebook"],
@@ -5177,8 +5416,33 @@ function SettingsTab({ B, bizCfg, saveBizCfg, leads, saveLeads, alerts, saveAler
         return (
           <>
             <Fold B={B} id="reviews" title={<>Reviews</>} note="Nothing appears on your site until you publish it." status={(reviews.filter((r) => r.approved === false).length ? `${reviews.filter((r) => r.approved === false).length} WAITING` : `${reviews.filter((r) => r.approved !== false).length} LIVE`)} tone={(reviews.filter((r) => r.approved === false).length ? "todo" : "on")} openSection={openSection} onOpen={setOpenSection} onBack={() => setOpenSection(null)}>
+            {/* auto-publish, plus a way to clear whatever is already waiting */}
+            <div style={{ ...panelStyle(B), display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 13.5, fontWeight: 500 }}>Publish reviews automatically</span>
+                <span style={{ display: "block", fontSize: 11.5, fontWeight: 300, color: B.c.faint, marginTop: 3, lineHeight: 1.5 }}>
+                  New reviews go straight onto your site instead of waiting here. You can still delete any of them.
+                </span>
+              </span>
+              <button onClick={() => saveSettings({ ...settings, autoPublishReviews: !settings.autoPublishReviews })}
+                className="hq-press" aria-label="Publish reviews automatically"
+                style={{ flexShrink: 0, width: 52, height: 29, borderRadius: 999, border: "none", cursor: "pointer", padding: 3,
+                  background: settings.autoPublishReviews ? B.c.accent : "#CBC2B4", display: "flex",
+                  justifyContent: settings.autoPublishReviews ? "flex-end" : "flex-start" }}>
+                <span style={{ width: 23, height: 23, borderRadius: "50%", background: "#fff", display: "block" }} />
+              </button>
+            </div>
+
             {pending.length > 0 && (
               <div style={{ marginBottom: 12 }}>
+                <button onClick={async () => {
+                    await saveReviews(reviews.map((r) => (r.approved === false ? { ...r, approved: true } : r)));
+                    toast(`Published ${pending.length} review${pending.length === 1 ? "" : "s"}`);
+                  }} className="hq-mono hq-press"
+                  style={{ width: "100%", padding: "11px 0", marginBottom: 10, borderRadius: 6, border: "none",
+                    background: B.c.deep, color: B.c.gold, fontSize: 8.5, letterSpacing: 1.6, cursor: "pointer" }}>
+                  PUBLISH ALL {pending.length} WAITING
+                </button>
                 <div className="hq-mono" style={{ fontSize: 8, letterSpacing: 2, color: B.c.accent, marginBottom: 6, fontWeight: 600 }}>NEW — NOT SHOWING YET</div>
                 {pending.map((r) => row(r, true))}
               </div>
@@ -5283,7 +5547,7 @@ const Stars = ({ n, size = 13, color }) => (
   </span>
 );
 
-function ReviewsPage({ B, reviews = [], saveReviews, lock, googleUrl }) {
+function ReviewsPage({ B, reviews = [], saveReviews, lock, googleUrl, autoPublish }) {
   const { input, card, H } = useBrandBits(B);
   const [filter, setFilter] = useState(lock || "all");
   const [form, setForm] = useState({ name: "", rating: 5, text: "", brand: lock || "VG" });
@@ -5298,7 +5562,7 @@ function ReviewsPage({ B, reviews = [], saveReviews, lock, googleUrl }) {
   const submit = async () => {
     if (!form.name.trim() || !form.text.trim()) return;
     await saveReviews([
-      { id: "rv" + Date.now(), brand: form.brand, name: form.name.trim(), rating: Number(form.rating), text: form.text.trim(), date: ymd(), approved: false },
+      { id: "rv" + Date.now(), brand: form.brand, name: form.name.trim(), rating: Number(form.rating), text: form.text.trim(), date: ymd(), approved: !!autoPublish },
       ...reviews,
     ]);
     setForm({ name: "", rating: 5, text: "", brand: "VG" });
@@ -5934,15 +6198,15 @@ function StudioTab({ B, services, hours, reviews = [], saveReviews, gallery = []
     { key: "book", label: isVG ? "Book a Glow" : "Book a Lesson", sub: from ? `${from} · services & times on the next screen` : "Straight into Paige's calendar", href: B.bookBase, primary: true, emblem: B.mark },
     isVG
       ? { key: "care", label: "Before & After Care", sub: "How to prep and make it last", emblem: "✦" }
-      : { key: "mkq", label: "Miss Kentucky's Queen",
-          sub: settings.mkqOpen ? "Registration is open · October 3" : (cd.diff > 0 ? `${cd.d} days away · October 3` : "Crowning day"),
-          art: MKQ_LOGO, live: !!settings.mkqOpen },
+      : (mkqIsOn(settings) ? { key: "mkq", label: "Miss Kentucky's Queen",
+          sub: settings.mkqOpen ? `Registration is open · ${mkqDayLabel(settings)}` : (cd.diff > 0 ? `${cd.d} days away · ${mkqDayLabel(settings)}` : "Crowning day"),
+          art: MKQ_LOGO, live: !!settings.mkqOpen } : null),
     ...(isVG ? [] : [{ key: "pageants", label: "Upcoming Pageants", sub: upcoming.length ? `${upcoming.length} on the calendar` : "Season calendar", emblem: "♛" }]),
     { key: "gallery", label: isVG ? "Glow Gallery" : "Gallery & Wall of Fame", sub: shots ? `${shots} to see` : "Her work", emblem: "◫" },
     { key: "hours", label: "Hours", sub: openToday && !/closed/i.test(openToday) ? `Open today ${openToday}` : "Closed today", emblem: "◷" },
     { key: "reviews", label: "Reviews", sub: mine.length ? `★ ${avg} from ${mine.length}` : "Be the first", emblem: "★" },
     ...(isVG ? [] : [{ key: "care", label: "Lesson Prep", sub: "What to bring, what to practice", emblem: "✧" }]),
-  ];
+  ].filter(Boolean);
 
   /* ---- the menu ---- */
   if (!section) {
@@ -6066,7 +6330,7 @@ function StudioTab({ B, services, hours, reviews = [], saveReviews, gallery = []
         </>
       )}
 
-      {section === "mkq" && <MkqPublic B={BRANDS.mkq} settings={settings} />}
+      {section === "mkq" && mkqIsOn(settings) && <MkqPublic B={BRANDS.mkq} settings={settings} />}
       {section === "gallery" && <GalleryPage B={B} lock={B.key} />}
       {!section && social && (
         <a href={social.url} target="_blank" rel="noreferrer" className="hq-mono hq-press"
@@ -6075,7 +6339,7 @@ function StudioTab({ B, services, hours, reviews = [], saveReviews, gallery = []
           {social.label}
         </a>
       )}
-      {section === "reviews" && <ReviewsPage B={B} reviews={reviews} saveReviews={saveReviews} lock={code} googleUrl={googleUrl} />}
+      {section === "reviews" && <ReviewsPage B={B} reviews={reviews} saveReviews={saveReviews} lock={code} googleUrl={googleUrl} autoPublish={!!settings.autoPublishReviews} />}
       {section === "care" && <CarePage B={B} lock={B.key} />}
     </div>
   );
@@ -6768,7 +7032,7 @@ const pageantWhen = (date, endDate) => {
 
 /* ================= MKQ PUBLIC (client-facing) ================= */
 function MkqPublic({ B, settings = {} }) {
-  const cd = useMkqCountdown();
+  const cd = useMkqCountdown(mkqWhen(settings));
   const open = !!settings.mkqOpen;
   const [openSession, setOpenSession] = useState("one");
   const [form, setForm] = useState({ name: "", age: "", division: "", parent: "", phone: "", email: "", photogenic: 0 });
