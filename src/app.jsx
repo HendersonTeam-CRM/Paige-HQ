@@ -3221,22 +3221,6 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
   const toMin = (t) => { if (!t) return 24 * 60; const [h, m] = t.split(":").map(Number); return h * 60 + (m || 0); };
   const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
   const isPast = (e) => nowMins > toMin(e.time) + (e.durMin || 30);
-  const upNext = todayList.find((e) => !isPast(e));
-  const upClient = upNext && upNext.clientName
-    ? clients.find((c) => (c.name || "").toLowerCase() === (upNext.clientName || "").toLowerCase())
-    : null;
-  const upIn = upNext ? toMin(upNext.time) - nowMins : null;
-  const upWhen = upIn == null ? ""
-    : upIn <= 0 ? "NOW"
-    : upIn < 60 ? `IN ${upIn} MINUTES`
-    : upIn < 120 ? "IN AN HOUR"
-    : `IN ${Math.round(upIn / 60)} HOURS`;
-  /* whatever she'd otherwise open their record to find */
-  const upNotes = upClient
-    ? (upNext.type === "tan"
-        ? [upClient.shade, upClient.undertone, upClient.skinNotes].filter(Boolean).join(" · ")
-        : [upClient.division, upClient.goals].filter(Boolean).join(" · "))
-    : "";
   /* The shape of her day — used by the header band and nothing else. */
   const dayShape = (() => {
     const real = todayList.filter((e) => e.time && !e.isGap);
@@ -3433,52 +3417,6 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
         </div>
       )}
 
-      {/* UP NEXT — the one thing she most often opens the app to check */}
-      {upNext && (
-        <div style={{ ...card, padding: 0, overflow: "hidden", marginBottom: 12, borderLeft: `3px solid ${B.c.accent}` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 13px 0" }}>
-            <span className="hq-mono" style={{ fontSize: 7, letterSpacing: 2.4, color: B.c.accent, fontWeight: 700 }}>UP NEXT</span>
-            <span style={{ flex: 1 }} />
-            <span className="hq-mono" style={{ fontSize: 8, letterSpacing: 1.2, color: B.c.faint }}>{upWhen}</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 13px 11px" }}>
-            {upClient && upClient.photo
-              ? <img src={`data:image/jpeg;base64,${upClient.photo}`} alt="" style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: `1.5px solid ${B.c.line}` }} />
-              : <span style={{ width: 48, height: 48, borderRadius: "50%", background: B.c.accent, color: "#FFFFFF", fontFamily: B.display, fontSize: 21, fontWeight: 600, display: "grid", placeItems: "center", flexShrink: 0 }}>
-                  {String(upNext.clientName || cleanTitle(upNext.title) || "?").trim().charAt(0).toUpperCase()}
-                </span>}
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: "block", fontFamily: B.display, fontSize: 21, fontWeight: 600, color: B.c.ink, lineHeight: 1.12 }}>
-                {upNext.clientName || cleanTitle(upNext.title)}
-              </span>
-              <span style={{ display: "block", fontSize: 12, fontWeight: 300, color: B.c.faint, marginTop: 2 }}>
-                {serviceLabel(upNext.title, upNext.type)}{(upNext.mins || minsFromName(upNext.title)) ? ` \u00b7 ${lenLabel(upNext.mins || minsFromName(upNext.title))}` : ""}
-              </span>
-              {upNotes && <span style={{ display: "block", fontSize: 11.5, fontWeight: 300, color: B.c.faint, opacity: 0.85, marginTop: 3 }}>{upNotes}</span>}
-            </span>
-            <span className="hq-mono" style={{ fontSize: 14, fontWeight: 700, color: B.c.deep, flexShrink: 0 }}>{prettyTime(upNext.time)}</span>
-          </div>
-          <div style={{ display: "flex", gap: 6, padding: "0 13px 12px" }}>
-            {(() => {
-              const ph = String((upClient && upClient.phone) || "").replace(/\D/g, "").slice(-10);
-              return (
-                <>
-                  {ph
-                    ? <a href={`sms:+1${ph}`} className="hq-mono hq-press" style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 7, textDecoration: "none", background: B.c.deep, color: B.c.gold, fontSize: 8.5, letterSpacing: 1.5, fontWeight: 700 }}>TEXT HER</a>
-                    : <span className="hq-mono" style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 7, background: B.c.soft, color: B.c.faint, fontSize: 8.5, letterSpacing: 1.5 }}>NO NUMBER</span>}
-                  {upClient && (
-                    <button onClick={() => onOpenPortal && onOpenPortal(upClient.id)} className="hq-mono hq-press"
-                      style={{ flex: 1, padding: "10px 0", borderRadius: 7, border: `1px solid ${B.c.line}`, background: "transparent", color: B.c.accent, fontSize: 8.5, letterSpacing: 1.5, cursor: "pointer" }}>HER PAGE</button>
-                  )}
-                  <button onClick={() => setLogging(upNext)} className="hq-mono hq-press"
-                    style={{ flex: 1, padding: "10px 0", borderRadius: 7, border: `1px solid ${B.c.line}`, background: "transparent", color: B.c.accent, fontSize: 8.5, letterSpacing: 1.5, cursor: "pointer" }}>LOG IT</button>
-                </>
-              );
-            })()}
-          </div>
-        </div>
-      )}
-
 
       <div style={{ ...card, minWidth: 0, padding: "12px 13px", borderLeft: `3px solid ${B.c.accent}` }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
@@ -3500,7 +3438,6 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
             );
 
             const past = isPast(e2);
-            const next = upNext && upNext.id === e2.id && upNext.kind === e2.kind;
             const c = clients.find((x) => (x.name || "").toLowerCase() === (e2.clientName || "").toLowerCase());
             const ph = String((c && c.phone) || "").replace(/\D/g, "").slice(-10);
             const len = e2.mins || minsFromName(e2.title) || e2.durMin || 0;
@@ -3515,7 +3452,6 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
                 display: "flex", gap: 9, padding: "9px 10px", marginBottom: 6, borderRadius: 9,
                 background: t.bg, borderLeft: `3px solid ${t.edge}`,
                 opacity: past ? 0.5 : 1,
-                boxShadow: next ? `0 0 0 1.5px ${t.edge}` : "none",
               }}>
                 {/* her face */}
                 {c && c.photo
@@ -3569,7 +3505,6 @@ function TodayPane({ B, events, pageants, directing, todos, saveTodos, income = 
                   <div style={{ display: "flex", alignItems: "baseline", gap: 5, marginTop: 2 }}>
                     <span style={{ fontSize: 11.5, fontWeight: 400, color: t.ink }}>{serviceLabel(e2.title, e2.type)}</span>
                     {len ? <span style={{ fontSize: 9, fontStyle: "italic", fontWeight: 300, color: t.ink, opacity: 0.6 }}>{lenLabel(len)}</span> : null}
-                    {next && <span className="hq-mono" style={{ fontSize: 6, letterSpacing: 1.2, color: "#FFFFFF", background: t.edge, borderRadius: 999, padding: "2px 7px", fontWeight: 700 }}>UP NEXT</span>}
                   </div>
 
                   {notes && (
